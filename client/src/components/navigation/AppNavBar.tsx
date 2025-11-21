@@ -185,11 +185,11 @@ export const AppNavBar = () => {
   };
 
   return (
-    <header className="fixed inset-x-0 top-0 z-50 px-4 pt-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
+    <header className="fixed top-6 left-4 right-4 z-50">
+      <div className="mx-auto max-w-6xl px-2 sm:px-4">
         <div
           ref={navRef}
-          className="relative isolate overflow-hidden rounded-3xl border border-white/30 bg-white/15 px-4 py-3 shadow-2xl shadow-blue-900/10 backdrop-blur-2xl transition dark:border-white/10 dark:bg-slate-900/45"
+          className="relative isolate overflow-hidden rounded-[2rem] border border-white/40 bg-white/70 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur-2xl transition-all duration-300 ease-out hover:shadow-xl hover:shadow-black/10 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-xl dark:shadow-black/20"
         >
           <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-white/70 via-white/10 to-white/30 opacity-90 dark:from-slate-800/60 dark:via-slate-900/70 dark:to-slate-900/50" />
           <div className="pointer-events-none absolute inset-x-12 top-0 -z-10 h-28 bg-gradient-to-br from-sky-400/50 via-indigo-500/40 to-purple-500/30 opacity-70 blur-3xl dark:from-sky-500/25 dark:via-indigo-400/25 dark:to-blue-500/25" />
@@ -239,10 +239,10 @@ export const AppNavBar = () => {
               <div className="hidden items-center xl:flex">
                 <span
                   className={clsx(
-                    'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.35em]',
+                    'inline-flex items-center gap-1 rounded-full border border-white/40 bg-white/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.35em] shadow-inner shadow-white/30 backdrop-blur',
                     isAdmin
-                      ? 'border-amber-200/70 bg-amber-50/80 text-amber-800 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-100'
-                      : 'border-white/30 bg-white/70 text-slate-800 dark:border-white/15 dark:bg-white/10 dark:text-white',
+                      ? 'text-amber-800 ring-1 ring-amber-200/70 dark:border-amber-400/30 dark:bg-amber-500/15 dark:text-amber-100'
+                      : 'text-slate-800 dark:border-white/15 dark:bg-white/10 dark:text-white',
                   )}
                 >
                   <ShieldCheckIcon className="h-4 w-4" aria-hidden="true" />
