@@ -92,11 +92,13 @@ export const AppNavBar = () => {
   const { currentStaff, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<Category | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
   const springEase = 'cubic-bezier(0.18, 1, 0.22, 1.25)';
 
   useEffect(() => {
     setMobileMenuOpen(false);
+    setMenuOpen(false);
     setActiveCategory(null);
   }, [location.pathname, location.search]);
 
@@ -109,7 +111,7 @@ export const AppNavBar = () => {
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
       if (navRef.current && !navRef.current.contains(event.target as Node)) {
-        setActiveCategory(null);
+        setMenuOpen(false);
       }
     };
 
@@ -118,7 +120,13 @@ export const AppNavBar = () => {
   }, []);
 
   const handleCategoryToggle = (category: Category) => {
-    setActiveCategory((current) => (current?.id === category.id ? null : category));
+    if (activeCategory?.id === category.id && menuOpen) {
+      setMenuOpen(false);
+      return;
+    }
+
+    setActiveCategory(category);
+    setMenuOpen(true);
   };
 
   const handleLogout = () => {
@@ -287,13 +295,14 @@ export const AppNavBar = () => {
           </div>
 
           <Transition
-            show={Boolean(activeCategory)}
+            show={menuOpen}
             enter="transition duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
             enterFrom="opacity-0 -translate-y-2"
             enterTo="opacity-100 translate-y-0"
             leave="transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
             leaveFrom="opacity-100 translate-y-0"
-            leaveTo="opacity-0 -translate-y-2"
+            leaveTo="opacity-0 -translate-y-10"
+            afterLeave={() => setActiveCategory(null)}
           >
             <div className="mt-4 flex items-start justify-between gap-3 rounded-2xl border border-white/25 bg-white/20 p-3 shadow-inner backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
               <div className="grid flex-1 grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
@@ -301,7 +310,7 @@ export const AppNavBar = () => {
                   <Link
                     key={item.id}
                     to={item.to}
-                    onClick={() => setActiveCategory(null)}
+                    onClick={() => setMenuOpen(false)}
                     className="group relative flex flex-col items-start justify-center gap-2 rounded-xl border border-white/30 bg-white/70 px-3 py-3 text-left text-slate-900 shadow-sm transition duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 hover:border-indigo-200/70 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-white/15 dark:bg-white/5 dark:text-white"
                     style={{
                       transitionDelay: `${index * 70}ms`,
@@ -329,7 +338,7 @@ export const AppNavBar = () => {
 
               <button
                 type="button"
-                onClick={() => setActiveCategory(null)}
+                onClick={() => setMenuOpen(false)}
                 className="inline-flex items-center justify-center rounded-2xl border border-white/30 bg-white/70 p-3 text-slate-700 transition hover:border-indigo-200 hover:text-indigo-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:border-white/15 dark:bg-white/5 dark:text-white"
                 aria-label="Close expanded menu"
               >
