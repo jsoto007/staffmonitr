@@ -196,7 +196,11 @@ export const AppNavBar = () => {
           <div className="flex items-center gap-4">
             <Link
               to="/dashboard"
-              className="flex items-center gap-3 rounded-2xl px-2 py-1 text-slate-900 transition hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-500 dark:text-white"
+              className={clsx(
+                'flex items-center gap-3 rounded-2xl px-2 py-1 text-slate-900 transition hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-500 dark:text-white',
+                'transition-opacity duration-500',
+                activeCategory ? 'opacity-0' : 'opacity-100',
+              )}
             >
               <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/35 via-sky-500/40 to-blue-500/35 text-base font-semibold text-indigo-800 shadow-inner shadow-white/40 dark:text-indigo-100">
                 SM
