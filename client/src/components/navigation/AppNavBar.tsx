@@ -18,6 +18,7 @@ import clsx from 'clsx';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { ADMIN_ROLE_SET } from '../../constants/roles';
 
 type Category = {
   id: string;
@@ -48,14 +49,14 @@ const NAV_CATEGORIES: Category[] = [
   },
   {
     id: 'calendar',
-    to: '/calendar',
-    label: 'Calendar',
+    to: '/calendar/projection',
+    label: 'Projection',
     accent: 'from-indigo-400/60 via-blue-500/70 to-sky-500/60',
     Icon: CalendarDaysIcon,
     items: [
-      { id: 'publish', label: 'Publish shifts', to: '/calendar', Icon: SparklesIcon },
-      { id: 'geofences', label: 'Geofences', to: '/calendar', Icon: ClipboardDocumentListIcon },
-      { id: 'coverage', label: 'Coverage QA', to: '/calendar', Icon: ShieldCheckIcon },
+      { id: 'publish', label: 'Projection', to: '/calendar/projection', Icon: SparklesIcon },
+      { id: 'geofences', label: 'Geofences', to: '/calendar/projection', Icon: ClipboardDocumentListIcon },
+      { id: 'coverage', label: 'Coverage QA', to: '/calendar/projection', Icon: ShieldCheckIcon },
     ],
   },
   {
@@ -83,8 +84,6 @@ const NAV_CATEGORIES: Category[] = [
     ],
   },
 ];
-
-const ADMIN_ROLES = new Set(['Owner_admin', 'Admin']);
 
 export const AppNavBar = () => {
   const location = useLocation();
@@ -134,10 +133,13 @@ export const AppNavBar = () => {
     navigate('/signin');
   };
 
-  const isAdmin = ADMIN_ROLES.has(currentStaff?.role ?? '');
+  const isAdmin = ADMIN_ROLE_SET.has(currentStaff?.role ?? '');
   const roleLabel = currentStaff?.role ?? 'Visitor';
   const cta = useMemo(
-    () => (!isAdmin ? { to: '/open-shifts', label: 'Find open shifts' } : null),
+    () =>
+      isAdmin
+        ? { to: '/admin', label: 'Admin console' }
+        : { to: '/open-shifts', label: 'Find open shifts' },
     [isAdmin],
   );
   const renderCategoryButton = (category: Category) => {
@@ -329,7 +331,6 @@ export const AppNavBar = () => {
                       </span>
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-slate-900 dark:text-white">{item.label}</span>
-                        <span className="text-xs text-slate-600 dark:text-slate-300">Tap to open</span>
                       </div>
                     </div>
                   </Link>

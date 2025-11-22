@@ -8,6 +8,7 @@ import { LandingPage } from './pages/LandingPage';
 import { OpenShiftsPage } from './pages/OpenShifts';
 import { SignInPage } from './pages/SignIn';
 import { SignUpPage } from './pages/SignUp';
+import { AdminPanel } from './pages/AdminPanel';
 
 function App() {
   return (
@@ -25,7 +26,7 @@ function App() {
           }
         />
         <Route
-          path="/calendar"
+          path="/calendar/projection"
           element={
             <Layout>
               <CalendarPage />
@@ -45,6 +46,14 @@ function App() {
           element={
             <Layout>
               <OpenShiftsPage />
+            </Layout>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <Layout>
+              <AdminPanel />
             </Layout>
           }
         />

@@ -1,6 +1,7 @@
 from .accounts import accounts_bp
 from .assignments import assignments_bp
 from .auth import auth_bp
+from .events import events_bp
 from .imports import imports_bp
 from .kids import kids_bp
 from .notifications import notifications_bp
@@ -11,5 +12,15 @@ __all__ = ['register_routes']
 
 
 def register_routes(app):
-    for blueprint in [auth_bp, accounts_bp, kids_bp, shifts_bp, assignments_bp, imports_bp, reports_bp, notifications_bp]:
+    for blueprint in [
+        auth_bp,
+        accounts_bp,
+        kids_bp,
+        shifts_bp,
+        assignments_bp,
+        imports_bp,
+        reports_bp,
+        notifications_bp,
+        events_bp,
+    ]:
         app.register_blueprint(blueprint, url_prefix='/api')

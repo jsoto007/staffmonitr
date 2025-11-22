@@ -93,6 +93,51 @@ def create_account_staff(account_id, *, current_staff):
         }
     ), 201
 
+
+@accounts_bp.route('/accounts/<account_id>/staff/<staff_id>', methods=['PATCH'])
+@require_auth
+@require_role('Owner_admin')
+def update_account_staff(account_id, staff_id, *, current_staff):
+    account = AccountGroup.query.get_or_404(account_id)
+    if account not in current_staff.accounts:
+        return jsonify({'error': 'Not assigned to the requested account'}), 403
+    staff = StaffMember.query.get_or_404(staff_id)
+    if staff not in account.staff:
+        return jsonify({'error': 'Staff not assigned to this account'}), 404
+    data = request.json or {}
+    if 'role' in data:
+        if data['role'] not in supported_roles():
+            return jsonify({'error': 'Unsupported role'}), 400
+        staff.role = data['role']
+    if 'status' in data:
+        staff.status = data['status']
+    db.session.commit()
+    return jsonify(
+        {
+            'id': staff.id,
+            'full_name': staff.full_name,
+            'email': staff.email,
+            'role': staff.role,
+            'status': staff.status,
+            'assigned_account_ids': [acct.id for acct in staff.accounts],
+        }
+    )
+
+
+@accounts_bp.route('/accounts/<account_id>/staff/<staff_id>', methods=['DELETE'])
+@require_auth
+@require_role('Owner_admin')
+def remove_account_staff(account_id, staff_id, *, current_staff):
+    account = AccountGroup.query.get_or_404(account_id)
+    if account not in current_staff.accounts:
+        return jsonify({'error': 'Not assigned to the requested account'}), 403
+    staff = StaffMember.query.get_or_404(staff_id)
+    if staff not in account.staff:
+        return jsonify({'error': 'Staff not assigned to this account'}), 404
+    account.staff.remove(staff)
+    db.session.commit()
+    return jsonify({'message': 'Staff removed from account'})
+
 @accounts_bp.route('/accounts/<account_id>/invite', methods=['POST'])
 def invite_staff(account_id):
     data = request.json or {}

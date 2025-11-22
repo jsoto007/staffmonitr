@@ -22,7 +22,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
       </div>
 
       <nav className="fixed bottom-8 left-1/2 z-50 flex h-16 min-w-[300px] max-w-xl -translate-x-1/2 items-center justify-between gap-4 rounded-full border border-white/40 bg-white/70 px-6 text-slate-800 shadow-lg shadow-black/5 backdrop-blur-2xl transition-all duration-300 ease-out md:hidden dark:border-white/10 dark:bg-slate-900/60 dark:text-slate-100 dark:shadow-xl dark:shadow-black/20">
-        {[{ path: '/dashboard', Icon: HomeIcon, label: 'Home' }, { path: '/calendar', Icon: CalendarDaysIcon, label: 'Calendar' }, { path: '/kids', Icon: UserGroupIcon, label: 'Community' }, { path: '/open-shifts', Icon: MegaphoneIcon, label: 'Broadcasts' }].map((item) => (
+        {[{ path: '/dashboard', Icon: HomeIcon, label: 'Home' }, { path: '/calendar/projection', Icon: CalendarDaysIcon, label: 'Projection' }, { path: '/kids', Icon: UserGroupIcon, label: 'Community' }, { path: '/open-shifts', Icon: MegaphoneIcon, label: 'Broadcasts' }].map((item) => (
           <Link
             key={item.path}
             to={item.path}

@@ -4,9 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAccountContext } from '../context/AccountContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import { ROLE_OPTIONS } from '../constants/roles';
 import type { Role } from '../types';
-
-const ROLE_OPTIONS: Role[] = ['Owner_admin', 'Admin', 'Staff', 'Driver', 'Lead', 'Trainer'];
 
 export const TeamManager = () => {
   const { selectedAccount } = useAccountContext();
