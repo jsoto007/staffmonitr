@@ -2,8 +2,42 @@ import clsx from 'clsx';
 import { useMemo } from 'react';
 
 import { ShiftBlock } from './ShiftBlock';
-import type { ShiftEvent, ShiftTemplate, StaffMember } from '../../types';
+import type { KidDetails, ShiftEvent, ShiftTemplate, StaffMember } from '../../types';
 import { SHIFT_WINDOW_COLOR_SCHEMES } from '../../constants/shiftWindows';
+
+type DayStatus = 'red' | 'yellow' | 'green';
+
+const STATUS_CLASSES: Record<DayStatus, string> = {
+  red: 'bg-rose-500',
+  yellow: 'bg-amber-400',
+  green: 'bg-emerald-400',
+};
+
+const computeStaffNeeded = (shift: ShiftEvent, template: ShiftTemplate | null): { target: number; ratioLabel: string } => {
+  const ratioStaff = template?.ratio_staff && template.ratio_staff > 0 ? template.ratio_staff : 1;
+  const ratioKids = template?.ratio_kids && template.ratio_kids > 0 ? template.ratio_kids : 4;
+  const kids: KidDetails[] = shift.kids ?? [];
+  const oneOnOneCount = kids.filter((kid) => kid.requiresOneOnOne || kid.ratio === '1:1').length;
+  const groupableKids = Math.max(kids.length - oneOnOneCount, 0);
+  const baseStaff =
+    ratioKids > 0 ? Math.ceil(groupableKids / ratioKids) * ratioStaff : ratioStaff;
+  const oneOnOneStaff = oneOnOneCount * ratioStaff;
+  const templateTarget = Math.max(baseStaff + oneOnOneStaff, ratioStaff);
+  const ratioMin = shift.ratio_min ?? 0;
+  const target = ratioMin > 0 ? Math.max(ratioMin, templateTarget) : templateTarget;
+  return { target, ratioLabel: `${ratioStaff}:${ratioKids}` };
+};
+
+const summarizeStatus = (assigned: number, target: number): DayStatus => {
+  const diff = assigned - target;
+  if (diff < 0) {
+    return 'red';
+  }
+  if (diff === 0) {
+    return 'yellow';
+  }
+  return 'green';
+};
 
 interface ShiftContainerProps {
   template: ShiftTemplate;
@@ -35,6 +69,11 @@ export const ShiftContainer = ({
     [shifts],
   );
   const assignmentCount = sortedShifts.reduce((total, shift) => total + (shift.assignments?.length ?? 0), 0);
+  const totalTarget = sortedShifts.reduce((total, shift) => {
+    const { target } = computeStaffNeeded(shift, template);
+    return total + target;
+  }, 0);
+  const status = summarizeStatus(assignmentCount, totalTarget);
 
   return (
     <section
@@ -48,14 +87,24 @@ export const ShiftContainer = ({
           <p className="text-lg font-semibold text-white">
             {template.start_time} – {template.end_time}
           </p>
+          <p className="text-xs text-slate-400">
+            Ratio {template.ratio_staff ?? 1}:{template.ratio_kids ?? 4}
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          <span
+            className={clsx('h-3 w-3 rounded-full border border-white/20', STATUS_CLASSES[status])}
+            aria-label={status}
+          />
           <span
             className="h-3 w-3 rounded-full border border-white/20"
             aria-hidden
             style={{ backgroundColor: accentColor }}
           />
           <span className="text-[11px] text-slate-400">{assignmentCount} assigned</span>
+          {totalTarget > 0 && (
+            <span className="text-[11px] text-slate-400">Target {totalTarget}</span>
+          )}
         </div>
       </div>
       <div className="mt-3 space-y-3">
@@ -90,6 +139,17 @@ export const ShiftContainer = ({
               onRequestCoverage={onRequestCoverage}
               onAssignStaff={onAssignStaff}
               onRemoveAssignment={onRemoveAssignment}
+              {...(() => {
+                const { target, ratioLabel } = computeStaffNeeded(shift, template);
+                const assignedCount = shift.assignments?.length ?? 0;
+                return {
+                  ratioLabel,
+                  targetStaff: target,
+                  assignedCountOverride: assignedCount,
+                  statusDotColor: summarizeStatus(assignedCount, target),
+                  displayLabel: template.label || shift.site,
+                };
+              })()}
             />
           ))
         )}

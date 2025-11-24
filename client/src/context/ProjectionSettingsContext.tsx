@@ -14,6 +14,8 @@ import {
 import type { CoverageMode, ShiftTemplate, StaffMember } from '../types';
 
 export const DEFAULT_COVERAGE_MODE: CoverageMode = 'partial_coverage';
+export const DEFAULT_RATIO_STAFF = 1;
+export const DEFAULT_RATIO_KIDS = 4;
 
 type ShiftAction =
   | { type: 'add'; shift: ShiftTemplate }
@@ -31,6 +33,8 @@ const normalizeShift = (shift: ShiftTemplate): ShiftTemplate => ({
   ...shift,
   category: shift.category ?? 'coverage',
   days: shift.days && shift.days.length ? shift.days : WEEK_DAY_ORDER,
+  ratio_staff: shift.ratio_staff ?? DEFAULT_RATIO_STAFF,
+  ratio_kids: shift.ratio_kids ?? DEFAULT_RATIO_KIDS,
 });
 
 const shiftReducer = (state: ShiftTemplate[], action: ShiftAction) => {

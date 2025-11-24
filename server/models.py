@@ -74,6 +74,8 @@ class ShiftTemplate(db.Model, TimestampMixin):
     category = db.Column(db.String(32), nullable=False, default='coverage')
     role = db.Column(db.String(128))
     days = db.Column(db.String(64), nullable=False, default='sun,mon,tue,wed,thu,fri,sat')
+    ratio_staff = db.Column(db.Integer, nullable=False, default=1)
+    ratio_kids = db.Column(db.Integer, nullable=False, default=4)
 
     projection_settings = db.relationship('ProjectionSettings', back_populates='shift_templates')
 

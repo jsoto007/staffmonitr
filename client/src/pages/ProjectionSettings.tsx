@@ -4,7 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAccountContext } from '../context/AccountContext';
 import { useAuth } from '../context/AuthContext';
-import { ProjectionSettingsProvider, useProjectionSettingsContext, DEFAULT_COVERAGE_MODE } from '../context/ProjectionSettingsContext';
+import {
+  ProjectionSettingsProvider,
+  useProjectionSettingsContext,
+  DEFAULT_COVERAGE_MODE,
+  DEFAULT_RATIO_KIDS,
+  DEFAULT_RATIO_STAFF,
+} from '../context/ProjectionSettingsContext';
 import { fetchProjectionSettings, updateProjectionSettings } from '../services/projectionSettings';
 import { fetchAccountStaff, updateAccountStaff } from '../services/staff';
 import { ADMIN_ROLE_SET, ROLE_OPTIONS } from '../constants/roles';
@@ -23,6 +29,8 @@ type ShiftCreationOptions = {
   category?: 'coverage' | 'role';
   role?: string;
   days?: string[];
+  ratio_staff?: number;
+  ratio_kids?: number;
 };
 
 type ShiftPreset = ShiftCreationOptions & {
@@ -95,6 +103,12 @@ const validateCoverageSegments = (segments: ShiftTemplate[]) => {
     }
     if (computeDuration(start, end) <= 0) {
       return 'Shift end time must be after the start time (wraparound supported).';
+    }
+    if (shift.ratio_staff != null && shift.ratio_staff <= 0) {
+      return 'Coverage ratios must have at least one staff member.';
+    }
+    if (shift.ratio_kids != null && shift.ratio_kids <= 0) {
+      return 'Coverage ratios must be positive.';
     }
     if (index > 0) {
       const prev = ordered[index - 1];
@@ -314,6 +328,8 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
         ? timeInputToMinutes(options.end)
         : (startMinutes + DEFAULT_SEGMENT_DURATION) % 1440;
     const baseDays = options.days ?? (category === 'role' ? DEFAULT_ROLE_DAYS : WEEK_DAY_ORDER);
+    const ratioStaff = options.ratio_staff ?? DEFAULT_RATIO_STAFF;
+    const ratioKids = options.ratio_kids ?? DEFAULT_RATIO_KIDS;
     const newShift: ShiftTemplate = {
       id: randomId(),
       label:
@@ -328,6 +344,8 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
       category,
       role: options.role,
       days: baseDays,
+      ratio_staff: ratioStaff,
+      ratio_kids: ratioKids,
     };
     runShiftAction({ type: 'add', shift: newShift });
     setScheduleFeedback(null);
@@ -339,6 +357,15 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
     value: string,
   ) => {
     runShiftAction({ type: 'update', id, updates: { [field]: value } });
+    setScheduleFeedback(null);
+  };
+
+  const handleShiftRatioChange = (id: string, field: 'ratio_staff' | 'ratio_kids', value: number) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return;
+    }
+    runShiftAction({ type: 'update', id, updates: { [field]: parsed } });
     setScheduleFeedback(null);
   };
 
@@ -425,6 +452,8 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
         category: shift.category ?? 'coverage',
         role: shift.role,
         days: shift.days,
+        ratio_staff: shift.ratio_staff ?? DEFAULT_RATIO_STAFF,
+        ratio_kids: shift.ratio_kids ?? DEFAULT_RATIO_KIDS,
       })),
     };
     saveMutation.mutate(payload);
@@ -654,6 +683,44 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
                         className="mt-1 h-10 w-16 rounded-2xl border border-white/10 p-0"
                       />
                     </label>
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Ratio</p>
+                      <div className="mt-1 space-y-2 rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+                        <div className="flex flex-wrap items-end gap-3">
+                          <label className="text-[11px] uppercase tracking-[0.25em] text-slate-400">
+                            Staff
+                            <input
+                              type="number"
+                              min={1}
+                              value={shift.ratio_staff ?? DEFAULT_RATIO_STAFF}
+                              onChange={(event) =>
+                                handleShiftRatioChange(shift.id, 'ratio_staff', Number(event.target.value))
+                              }
+                              className="mt-1 w-20 rounded-xl border border-white/10 bg-slate-900/60 px-2 py-1 text-sm text-white focus:border-white focus:outline-none"
+                            />
+                          </label>
+                          <span className="pb-2 text-sm text-slate-300">:</span>
+                          <label className="text-[11px] uppercase tracking-[0.25em] text-slate-400">
+                            Kids
+                            <input
+                              type="number"
+                              min={1}
+                              value={shift.ratio_kids ?? DEFAULT_RATIO_KIDS}
+                              onChange={(event) =>
+                                handleShiftRatioChange(shift.id, 'ratio_kids', Number(event.target.value))
+                              }
+                              className="mt-1 w-20 rounded-xl border border-white/10 bg-slate-900/60 px-2 py-1 text-sm text-white focus:border-white focus:outline-none"
+                            />
+                          </label>
+                          <div className="pb-2 text-sm text-slate-200">
+                            {shift.ratio_staff ?? DEFAULT_RATIO_STAFF} staff per {shift.ratio_kids ?? DEFAULT_RATIO_KIDS} kids
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          Kids marked 1:1 require an extra staff slot for this shift.
+                        </p>
+                      </div>
+                    </div>
 
                     <div className="flex items-center justify-between text-[11px] text-slate-400">
                       <span>

@@ -46,6 +46,8 @@ export interface ShiftTemplate {
   category?: 'coverage' | 'role';
   role?: string | null;
   days?: string[];
+  ratio_staff?: number;
+  ratio_kids?: number;
 }
 
 export interface ProjectionSettings {

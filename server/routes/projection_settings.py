@@ -14,6 +14,8 @@ DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 DEFAULT_SHIFT_DAYS = DAY_KEYS[:]
 VALID_DAY_SET = set(DAY_KEYS)
 MINUTES_PER_DAY = 24 * 60
+DEFAULT_RATIO_STAFF = 1
+DEFAULT_RATIO_KIDS = 4
 
 
 def _format_minutes(minutes: int) -> str:
@@ -50,6 +52,8 @@ def _serialize_shift(template: ShiftTemplate) -> dict:
         'category': template.category or 'coverage',
         'role': template.role,
         'days': (template.days or '').split(',') if template.days else DEFAULT_SHIFT_DAYS,
+        'ratio_staff': template.ratio_staff or DEFAULT_RATIO_STAFF,
+        'ratio_kids': template.ratio_kids or DEFAULT_RATIO_KIDS,
     }
 
 
@@ -99,6 +103,15 @@ def _build_shift_payload(raw: dict, index: int) -> dict:
     days_list = _parse_days(raw.get('days'), category)
     if category == 'role' and not role:
         raise ValueError('Role-specific shifts require a role to be assigned.')
+    ratio_staff = raw.get('ratio_staff', DEFAULT_RATIO_STAFF)
+    ratio_kids = raw.get('ratio_kids', DEFAULT_RATIO_KIDS)
+    try:
+        ratio_staff_int = int(ratio_staff)
+        ratio_kids_int = int(ratio_kids)
+    except (TypeError, ValueError):
+        raise ValueError('Ratio values must be integers.')
+    if ratio_staff_int <= 0 or ratio_kids_int <= 0:
+        raise ValueError('Ratio values must be positive.')
     return {
         'id': raw.get('id'),
         'label': label,
@@ -109,6 +122,8 @@ def _build_shift_payload(raw: dict, index: int) -> dict:
         'category': category,
         'role': role,
         'days': ','.join(days_list),
+        'ratio_staff': ratio_staff_int,
+        'ratio_kids': ratio_kids_int,
     }
 
 
@@ -200,6 +215,8 @@ def update_projection_settings(account_id: str, *, current_staff):
         template.category = shift_spec.get('category', 'coverage')
         template.role = shift_spec.get('role')
         template.days = shift_spec.get('days') or ','.join(DEFAULT_SHIFT_DAYS)
+        template.ratio_staff = shift_spec.get('ratio_staff', DEFAULT_RATIO_STAFF)
+        template.ratio_kids = shift_spec.get('ratio_kids', DEFAULT_RATIO_KIDS)
         kept_ids.add(template.id)
 
     for template in settings.shift_templates:
