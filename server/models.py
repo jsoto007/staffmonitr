@@ -30,6 +30,49 @@ class AccountGroup(db.Model, TimestampMixin):
     active = db.Column(db.Boolean, default=True)
 
     staff = db.relationship('StaffMember', secondary=staff_account_association, back_populates='accounts')
+    projection_settings = db.relationship(
+        'ProjectionSettings',
+        uselist=False,
+        back_populates='account_group',
+        cascade='all, delete-orphan',
+    )
+
+
+class ProjectionSettings(db.Model, TimestampMixin):
+    __tablename__ = 'projection_settings'
+
+    account_group_id = db.Column(
+        db.String(36),
+        db.ForeignKey('account_groups.id', ondelete='CASCADE'),
+        primary_key=True,
+    )
+    coverage_mode = db.Column(db.String(32), nullable=False, default='partial_coverage')
+
+    account_group = db.relationship('AccountGroup', back_populates='projection_settings')
+    shift_templates = db.relationship(
+        'ShiftTemplate',
+        back_populates='projection_settings',
+        cascade='all, delete-orphan',
+        order_by='ShiftTemplate.sort_order',
+    )
+
+
+class ShiftTemplate(db.Model, TimestampMixin):
+    __tablename__ = 'shift_templates'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_group_id = db.Column(
+        db.String(36),
+        db.ForeignKey('projection_settings.account_group_id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    label = db.Column(db.String(128), nullable=False)
+    start_minute = db.Column(db.Integer, nullable=False)
+    end_minute = db.Column(db.Integer, nullable=False)
+    color = db.Column(db.String(24))
+    sort_order = db.Column(db.Integer, nullable=False)
+
+    projection_settings = db.relationship('ProjectionSettings', back_populates='shift_templates')
 
 class PermissionMixin:
     @hybrid_property

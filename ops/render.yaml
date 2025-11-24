@@ -27,3 +27,7 @@ services:
         value: ${VITE_API_URL}
       - key: VITE_DEFAULT_STAFF_ID
         value: ${VITE_DEFAULT_STAFF_ID}
+    routes:
+      - type: rewrite
+        src: /(.*)
+        dest: /index.html

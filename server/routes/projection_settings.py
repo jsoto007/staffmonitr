@@ -2,117 +2,176 @@ import uuid
 from flask import Blueprint, jsonify, request
 
 from ..database import db
-from ..models import AccountGroup, ShiftWindow
+from ..models import AccountGroup, ProjectionSettings, ShiftTemplate
 from ..utils.auth_helpers import require_auth, require_role
 
 projection_settings_bp = Blueprint('projection_settings', __name__)
 
+ALLOWED_COVERAGE_MODES = {'full_24h', 'partial_coverage'}
+DEFAULT_COVERAGE_MODE = 'partial_coverage'
+MINUTES_PER_DAY = 24 * 60
 
-def _serialize_window(window: ShiftWindow) -> dict:
+
+def _format_minutes(minutes: int) -> str:
+    normalized = minutes % MINUTES_PER_DAY
+    hours = normalized // 60
+    mins = normalized % 60
+    return f"{hours:02d}:{mins:02d}"
+
+
+def _parse_time(value: str) -> int:
+    if not isinstance(value, str):
+        raise ValueError('Time values must be strings in HH:MM format.')
+    parts = value.split(':')
+    if len(parts) != 2:
+        raise ValueError('Time values must include hours and minutes.')
+    hours, minutes = parts
+    if not hours.isdigit() or not minutes.isdigit():
+        raise ValueError('Time values must be numeric.')
+    parsed_hours = int(hours)
+    parsed_minutes = int(minutes)
+    if not (0 <= parsed_hours < 24) or not (0 <= parsed_minutes < 60):
+        raise ValueError('Hours must be 0-23 and minutes 0-59.')
+    return parsed_hours * 60 + parsed_minutes
+
+
+def _serialize_shift(template: ShiftTemplate) -> dict:
     return {
-        'id': window.id,
-        'account_group_id': window.account_group_id,
-        'name': window.name,
-        'start_minute': window.start_minute,
-        'end_minute': window.end_minute,
-        'order': window.sort_order,
+        'id': template.id,
+        'label': template.label,
+        'start_time': _format_minutes(template.start_minute),
+        'end_time': _format_minutes(template.end_minute),
+        'color': template.color,
+        'order': template.sort_order,
     }
 
 
-def _validate_sequence(windows: list[dict]) -> None:
-    if not windows:
-        raise ValueError('Provide at least one shift segment.')
-    last_end = None
-    for window in windows:
-        start = window['start_minute']
-        end = window['end_minute']
-        if start < 0 or end > 1440:
-            raise ValueError('Window times must stay within a single day.')
-        if start >= end:
-            raise ValueError('Start time must be before end time.')
-        if last_end is not None and start != last_end:
-            raise ValueError('Segments must connect without gaps or overlaps.')
-        last_end = end
+def _validate_shift_sequence(shifts: list[dict]) -> None:
+    if not shifts:
+        return
+    ordered = sorted(shifts, key=lambda payload: payload.get('order', 0))
+    for shift in ordered:
+        start = shift['start_minute']
+        end = shift['end_minute']
+        if not (0 <= start < MINUTES_PER_DAY) or not (0 <= end < MINUTES_PER_DAY):
+            raise ValueError('Shift times must stay within a single day.')
+        duration = end - start if end > start else end + MINUTES_PER_DAY - start
+        if duration <= 0:
+            raise ValueError('Each shift must cover at least one minute.')
+    for current, next_shift in zip(ordered, ordered[1:]):
+        if next_shift['start_minute'] != current['end_minute']:
+            raise ValueError('Shifts must connect without gaps or overlaps.')
 
 
-@projection_settings_bp.route('/shift-windows', methods=['GET'])
-def list_shift_windows():
-    account_id = request.args.get('account_id')
-    if not account_id:
-        return jsonify({'error': 'account_id is required'}), 400
-    windows = (
-        ShiftWindow.query.filter_by(account_group_id=account_id)
-        .order_by(ShiftWindow.sort_order)
-        .all()
-    )
-    return jsonify([_serialize_window(window) for window in windows])
+def _get_projection_settings(account_id: str) -> ProjectionSettings:
+    settings = ProjectionSettings.query.get(account_id)
+    if not settings:
+        settings = ProjectionSettings(account_group_id=account_id)
+        db.session.add(settings)
+        db.session.flush()
+    return settings
 
 
-@projection_settings_bp.route('/shift-windows', methods=['PUT'])
+def _build_shift_payload(raw: dict, index: int) -> dict:
+    start_raw = raw.get('start_time')
+    end_raw = raw.get('end_time')
+    if start_raw is None or end_raw is None:
+        raise ValueError('Each shift requires both start_time and end_time.')
+    start_minute = _parse_time(start_raw)
+    end_minute = _parse_time(end_raw)
+    label = (raw.get('label') or f'Shift {index + 1}').strip() or f'Shift {index + 1}'
+    color = raw.get('color')
+    order = raw.get('order')
+    if order is None:
+        order = index
+    return {
+        'id': raw.get('id'),
+        'label': label,
+        'start_minute': start_minute,
+        'end_minute': end_minute,
+        'color': color,
+        'order': order,
+    }
+
+
+@projection_settings_bp.route('/accounts/<account_id>/projection-settings', methods=['GET'])
 @require_auth
 @require_role('Owner_admin', 'Admin')
-def replace_shift_windows(*, current_staff):
-    payload = request.json or {}
-    account_id = payload.get('account_group_id')
-    if not account_id:
-        return jsonify({'error': 'account_group_id is required'}), 400
+def get_projection_settings(account_id: str, *, current_staff):
+    account = AccountGroup.query.get_or_404(account_id)
+    if account not in current_staff.accounts:
+        return jsonify({'error': 'Missing access to the requested account'}), 403
+    settings = ProjectionSettings.query.get(account_id)
+    if not settings:
+        return jsonify({'coverage_mode': DEFAULT_COVERAGE_MODE, 'shifts': []})
+    return jsonify(
+        {
+            'coverage_mode': settings.coverage_mode,
+            'shifts': [_serialize_shift(template) for template in settings.shift_templates],
+        },
+    )
+
+
+@projection_settings_bp.route('/accounts/<account_id>/projection-settings', methods=['PUT'])
+@require_auth
+@require_role('Owner_admin', 'Admin')
+def update_projection_settings(account_id: str, *, current_staff):
     account = AccountGroup.query.get_or_404(account_id)
     if account not in current_staff.accounts:
         return jsonify({'error': 'Missing access to the requested account'}), 403
 
-    raw_windows = payload.get('windows') or []
-    parsed = []
-    for index, raw_window in enumerate(raw_windows):
-        start = raw_window.get('start_minute')
-        end = raw_window.get('end_minute')
-        if start is None or end is None:
-            return jsonify({'error': 'start_minute and end_minute are required for every segment'}), 400
+    payload = request.json or {}
+    coverage_mode = payload.get('coverage_mode') or DEFAULT_COVERAGE_MODE
+    if coverage_mode not in ALLOWED_COVERAGE_MODES:
+        return jsonify({'error': f"coverage_mode must be one of {', '.join(ALLOWED_COVERAGE_MODES)}"}), 400
+
+    raw_shifts = payload.get('shifts') or []
+    if not isinstance(raw_shifts, list):
+        return jsonify({'error': 'shifts must be an array'}), 400
+
+    parsed_shifts = []
+    for index, raw_shift in enumerate(raw_shifts):
         try:
-            start_value = int(start)
-            end_value = int(end)
-        except (TypeError, ValueError):
-            return jsonify({'error': 'start_minute and end_minute must be integers'}), 400
-        parsed.append(
-            {
-                'id': raw_window.get('id'),
-                'name': raw_window.get('name') or f'Shift {index + 1}',
-                'start_minute': start_value,
-                'end_minute': end_value,
-                'sort_order': index,
-            }
-        )
+            parsed_shifts.append(_build_shift_payload(raw_shift, index))
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
 
     try:
-        _validate_sequence(parsed)
+        _validate_shift_sequence(parsed_shifts)
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
-    existing = ShiftWindow.query.filter_by(account_group_id=account_id).all()
-    existing_by_id = {window.id: window for window in existing}
+    settings = _get_projection_settings(account_id)
+    settings.coverage_mode = coverage_mode
+
+    existing_templates = {template.id: template for template in settings.shift_templates}
     kept_ids = set()
 
-    for window_spec in parsed:
-        window_model = existing_by_id.get(window_spec['id']) if window_spec.get('id') else None
-        if window_model is None:
-            window_model = ShiftWindow(
-                id=window_spec.get('id') or str(uuid.uuid4()),
+    for shift_spec in sorted(parsed_shifts, key=lambda spec: spec['order']):
+        template = existing_templates.get(shift_spec.get('id'))
+        if template is None:
+            template = ShiftTemplate(
+                id=shift_spec.get('id') or str(uuid.uuid4()),
                 account_group_id=account_id,
             )
-            db.session.add(window_model)
-        window_model.name = window_spec['name']
-        window_model.start_minute = window_spec['start_minute']
-        window_model.end_minute = window_spec['end_minute']
-        window_model.sort_order = window_spec['sort_order']
-        kept_ids.add(window_model.id)
+            db.session.add(template)
+        template.label = shift_spec['label']
+        template.start_minute = shift_spec['start_minute']
+        template.end_minute = shift_spec['end_minute']
+        template.color = shift_spec.get('color')
+        template.sort_order = shift_spec['order']
+        kept_ids.add(template.id)
 
-    for window in existing:
-        if window.id not in kept_ids:
-            db.session.delete(window)
+    for template in settings.shift_templates:
+        if template.id not in kept_ids:
+            db.session.delete(template)
 
     db.session.commit()
-    updated = (
-        ShiftWindow.query.filter_by(account_group_id=account_id)
-        .order_by(ShiftWindow.sort_order)
-        .all()
+
+    updated_settings = ProjectionSettings.query.get(account_id)
+    return jsonify(
+        {
+            'coverage_mode': updated_settings.coverage_mode,
+            'shifts': [_serialize_shift(template) for template in updated_settings.shift_templates],
+        },
     )
-    return jsonify({'shift_windows': [_serialize_window(window) for window in updated]})

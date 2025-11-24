@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useScheduleStore } from '../stores/scheduleStore';
 import { fetchShifts, requestShiftCoverage } from '../services/shifts';
 import { fetchAccountStaff } from '../services/staff';
+import { fetchProjectionSettings } from '../services/projectionSettings';
 import { ViewSwitcher } from '../components/calendar/ViewSwitcher';
 import { DayView } from '../components/calendar/DayView';
 import { WeekView } from '../components/calendar/WeekView';
@@ -155,6 +156,17 @@ export const CalendarPage = () => {
   );
   const weekStart = useMemo(() => calculateWeekStart(focusDate), [focusDate]);
 
+  const { data: projectionSettings } = useQuery(
+    ['projectionSettings', accountId],
+    () => fetchProjectionSettings(accountId),
+    {
+      enabled: Boolean(accountId),
+      refetchOnWindowFocus: false,
+    },
+  );
+
+  const shiftTemplates = projectionSettings?.shifts ?? [];
+
   const viewContent = useMemo(() => {
     if (viewMode === 'day') {
       return (
@@ -163,6 +175,8 @@ export const CalendarPage = () => {
           shifts={dayShifts}
           isAdmin={isAdmin}
           onRequestCoverage={handleRequestCoverage}
+          shiftTemplates={shiftTemplates}
+          staffMembers={staffList}
         />
       );
     }
@@ -173,6 +187,8 @@ export const CalendarPage = () => {
           shifts={shifts}
           isAdmin={isAdmin}
           onRequestCoverage={handleRequestCoverage}
+          shiftTemplates={shiftTemplates}
+          staffMembers={staffList}
         />
       );
     }
@@ -183,9 +199,10 @@ export const CalendarPage = () => {
         isAdmin={isAdmin}
         onRequestCoverage={handleRequestCoverage}
         staffMembers={staffList}
+        shiftTemplates={shiftTemplates}
       />
     );
-  }, [dayShifts, focusDate, handleRequestCoverage, isAdmin, viewMode, staffList, weekStart, shifts]);
+  }, [dayShifts, focusDate, handleRequestCoverage, isAdmin, shiftTemplates, viewMode, staffList, weekStart, shifts]);
 
   return (
     <section className="space-y-8">

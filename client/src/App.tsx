@@ -9,6 +9,7 @@ import { OpenShiftsPage } from './pages/OpenShifts';
 import { SignInPage } from './pages/SignIn';
 import { SignUpPage } from './pages/SignUp';
 import { AdminPanel } from './pages/AdminPanel';
+import { ProjectionSettingsPage } from './pages/ProjectionSettings';
 
 function App() {
   return (
@@ -30,6 +31,14 @@ function App() {
           element={
             <Layout>
               <CalendarPage />
+            </Layout>
+          }
+        />
+        <Route
+          path="/calendar/projection-settings"
+          element={
+            <Layout>
+              <ProjectionSettingsPage />
             </Layout>
           }
         />

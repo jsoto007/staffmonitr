@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
-import type { ShiftEvent, StaffMember } from '../../types';
+import type { ShiftEvent, ShiftTemplate, StaffMember } from '../../types';
+
+import { CalendarDay } from './CalendarDay';
 
 type DayStatus = 'red' | 'yellow' | 'green';
 
@@ -61,49 +63,46 @@ const formatShiftTime = (shift: ShiftEvent) => {
 interface MonthViewProps {
   monthDate: Date;
   shifts: ShiftEvent[];
+  shiftTemplates: ShiftTemplate[];
   staffMembers: StaffMember[];
   isAdmin: boolean;
   onRequestCoverage: (shift: ShiftEvent) => void;
 }
 
-export const MonthView = ({ monthDate, shifts, staffMembers, isAdmin, onRequestCoverage }: MonthViewProps) => {
+export const MonthView = ({ monthDate, shifts, shiftTemplates, staffMembers, isAdmin, onRequestCoverage }: MonthViewProps) => {
   const [activeDate, setActiveDate] = useState<Date | null>(null);
-
   const gridDates = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
+
+  const shiftsByDate = useMemo(() => {
+    const map = new Map<string, ShiftEvent[]>();
+    shifts.forEach((shift) => {
+      const key = new Date(shift.start_time).toDateString();
+      const bucket = map.get(key) ?? [];
+      bucket.push(shift);
+      map.set(key, bucket);
+    });
+    return map;
+  }, [shifts]);
+
+  const dayStatusByDate = useMemo(() => {
+    const statusMap = new Map<string, DayStatus>();
+    shiftsByDate.forEach((dayShifts, key) => {
+      statusMap.set(key, summarizeDayStatus(dayShifts));
+    });
+    return statusMap;
+  }, [shiftsByDate]);
 
   const staffById = useMemo(() => {
     const lookup: Record<string, StaffMember> = {};
-    staffMembers.forEach((member) => {
-      lookup[member.id] = member;
+    staffMembers.forEach((staff) => {
+      lookup[staff.id] = staff;
     });
     return lookup;
   }, [staffMembers]);
 
-  const { shiftsByDate, dayStatusByDate } = useMemo(() => {
-    const shiftsMap = new Map<string, ShiftEvent[]>();
-    shifts.forEach((shift) => {
-      const key = new Date(shift.start_time).toDateString();
-      const bucket = shiftsMap.get(key) ?? [];
-      bucket.push(shift);
-      shiftsMap.set(key, bucket);
-    });
-    const statusMap = new Map<string, DayStatus>();
-    shiftsMap.forEach((dayShifts, key) => {
-      statusMap.set(key, summarizeDayStatus(dayShifts));
-    });
-    return { shiftsByDate: shiftsMap, dayStatusByDate: statusMap };
-  }, [shifts]);
-
-  const selectedKey = activeDate?.toDateString() ?? '';
-  const selectedShifts = selectedKey ? shiftsByDate.get(selectedKey) ?? [] : [];
-  const selectedStatus = selectedKey ? dayStatusByDate.get(selectedKey) ?? 'yellow' : 'yellow';
-  const sortedShifts = useMemo(
-    () =>
-      [...selectedShifts].sort(
-        (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
-      ),
-    [selectedShifts],
-  );
+  const selectedDateKey = activeDate?.toDateString() ?? '';
+  const selectedShifts = selectedDateKey ? shiftsByDate.get(selectedDateKey) ?? [] : [];
+  const selectedStatus = selectedDateKey ? dayStatusByDate.get(selectedDateKey) ?? 'yellow' : 'yellow';
 
   const handleDayClick = (date: Date) => {
     setActiveDate(date);
@@ -139,10 +138,7 @@ export const MonthView = ({ monthDate, shifts, staffMembers, isAdmin, onRequestC
             >
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm font-semibold leading-none text-white">{date.getDate()}</span>
-                <span
-                  className={`h-3 w-3 rounded-full border border-white/30 ${STATUS_CLASSES[status]}`}
-                  aria-hidden="true"
-                />
+                <span className={`h-3 w-3 rounded-full border border-white/30 ${STATUS_CLASSES[status]}`} aria-hidden />
               </div>
             </button>
           );
@@ -181,82 +177,30 @@ export const MonthView = ({ monthDate, shifts, staffMembers, isAdmin, onRequestC
               </div>
             </div>
 
-            <div className="max-h-[70vh] space-y-6 overflow-y-auto px-6 py-5">
-              {sortedShifts.length === 0 ? (
-                <p className="text-sm text-slate-400">No shifts scheduled for this day.</p>
-              ) : (
-                sortedShifts.map((shift) => (
-                    <div
-                      key={shift.id}
-                      className="space-y-3 rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-inner shadow-black/50"
-                    >
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-xs uppercase tracking-[0.4em] text-slate-400">{shift.site}</p>
-                          <h3 className="text-lg font-semibold text-white">{formatShiftTime(shift)}</h3>
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-slate-400">
-                          <span>Ratio {shift.ratio_min ?? 1}</span>
-                          <span>Role · {shift.role}</span>
-                          {isAdmin && (
-                            <button
-                              type="button"
-                              onClick={() => onRequestCoverage(shift)}
-                              className="rounded-full border border-white/20 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-white transition hover:border-white/60"
-                            >
-                              Request coverage
-                            </button>
-                          )}
-                        </div>
-                      </div>
+            <div className="px-6 py-5">
+              <CalendarDay
+                date={activeDate}
+                shifts={selectedShifts}
+                shiftTemplates={shiftTemplates}
+                staffMembers={staffMembers}
+                isAdmin={isAdmin}
+                onRequestCoverage={onRequestCoverage}
+                showHeader={false}
+              />
+            </div>
 
-                      <div className="space-y-2">
-                        {shift.assignments.length === 0 ? (
-                          <p className="text-sm text-slate-400">No staff assigned yet.</p>
-                        ) : (
-                          shift.assignments.map((assignment) => {
-                            const staffName =
-                              assignment.staff_id && staffById[assignment.staff_id]
-                                ? staffById[assignment.staff_id].full_name
-                                : assignment.staff_id
-                                ? assignment.staff_id
-                                : 'Unassigned slot';
-                            return (
-                              <div
-                                key={assignment.id}
-                                className="flex flex-col gap-1 rounded-2xl border border-white/5 bg-white/5 p-3 text-sm text-slate-200 sm:flex-row sm:items-center sm:justify-between"
-                              >
-                                <div>
-                                  <p className="text-sm font-semibold text-white">{staffName}</p>
-                                  <p className="text-xs text-slate-400">
-                                    {assignment.title} · Difficulty {assignment.difficulty}
-                                  </p>
-                                </div>
-                                <span className="text-[11px] uppercase tracking-[0.4em] text-slate-500">
-                                  {assignment.staffRole ?? shift.role}
-                                </span>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
+            <div className="space-y-4 border-t border-white/5 px-6 py-5">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.4em] text-slate-400">Status legend</h3>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {STATUS_LEGEND.map((item) => (
+                  <div key={item.status} className="flex items-start gap-2 rounded-2xl border border-white/5 bg-slate-900/50 p-3">
+                    <span className={`mt-1 h-3 w-3 rounded-full ${STATUS_CLASSES[item.status]}`} />
+                    <div>
+                      <p className="text-sm font-semibold text-white">{item.label}</p>
+                      <p className="text-xs text-slate-400">{item.description}</p>
                     </div>
-                  ))
-              )}
-
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold uppercase tracking-[0.4em] text-slate-400">Status legend</h3>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {STATUS_LEGEND.map((item) => (
-                    <div key={item.status} className="flex items-start gap-2 rounded-2xl border border-white/5 bg-slate-900/50 p-3">
-                      <span className={`mt-1 h-3 w-3 rounded-full ${STATUS_CLASSES[item.status]}`} />
-                      <div>
-                        <p className="text-sm font-semibold text-white">{item.label}</p>
-                        <p className="text-xs text-slate-400">{item.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

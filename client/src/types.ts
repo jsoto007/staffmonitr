@@ -34,13 +34,20 @@ export interface StaffMember {
   invite_expires_at?: string | null;
 }
 
-export interface ShiftWindow {
+export type CoverageMode = 'full_24h' | 'partial_coverage';
+
+export interface ShiftTemplate {
   id: string;
-  account_group_id: string;
-  name: string;
-  start_minute: number;
-  end_minute: number;
+  label: string;
+  start_time: string;
+  end_time: string;
+  color?: string | null;
   order: number;
+}
+
+export interface ProjectionSettings {
+  coverage_mode: CoverageMode;
+  shifts: ShiftTemplate[];
 }
 
 export interface ShiftEvent {

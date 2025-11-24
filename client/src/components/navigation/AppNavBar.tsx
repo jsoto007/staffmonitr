@@ -55,7 +55,7 @@ const NAV_CATEGORIES: Category[] = [
     Icon: CalendarDaysIcon,
     items: [
       { id: 'publish', label: 'Projection', to: '/calendar/projection', Icon: SparklesIcon },
-      { id: 'geofences', label: 'Geofences', to: '/calendar/projection', Icon: ClipboardDocumentListIcon },
+      { id: 'projection-settings', label: 'Projection Settings', to: '/calendar/projection-settings', Icon: ClipboardDocumentListIcon },
       { id: 'coverage', label: 'Coverage QA', to: '/calendar/projection', Icon: ShieldCheckIcon },
     ],
   },
