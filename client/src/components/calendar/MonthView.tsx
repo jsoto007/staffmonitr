@@ -67,9 +67,20 @@ interface MonthViewProps {
   staffMembers: StaffMember[];
   isAdmin: boolean;
   onRequestCoverage: (shift: ShiftEvent) => void;
+  onAssignStaff?: (shift: ShiftEvent) => void;
+  onAssignTemplate?: (template: ShiftTemplate, date: Date) => void;
 }
 
-export const MonthView = ({ monthDate, shifts, shiftTemplates, staffMembers, isAdmin, onRequestCoverage }: MonthViewProps) => {
+export const MonthView = ({
+  monthDate,
+  shifts,
+  shiftTemplates,
+  staffMembers,
+  isAdmin,
+  onRequestCoverage,
+  onAssignStaff,
+  onAssignTemplate,
+}: MonthViewProps) => {
   const [activeDate, setActiveDate] = useState<Date | null>(null);
   const gridDates = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
 
@@ -185,6 +196,8 @@ export const MonthView = ({ monthDate, shifts, shiftTemplates, staffMembers, isA
                 staffMembers={staffMembers}
                 isAdmin={isAdmin}
                 onRequestCoverage={onRequestCoverage}
+                onAssignStaff={onAssignStaff}
+                onAssignTemplate={onAssignTemplate}
                 showHeader={false}
               />
             </div>

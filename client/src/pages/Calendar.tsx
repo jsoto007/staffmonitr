@@ -4,17 +4,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccountContext } from '../context/AccountContext';
 import { useAuth } from '../context/AuthContext';
 import { useScheduleStore } from '../stores/scheduleStore';
-import { fetchShifts, requestShiftCoverage } from '../services/shifts';
+import { fetchShifts, requestShiftCoverage, createShift } from '../services/shifts';
 import { fetchAccountStaff } from '../services/staff';
 import { fetchProjectionSettings } from '../services/projectionSettings';
+import { createAssignment, updateAssignment } from '../services/assignments';
 import { ViewSwitcher } from '../components/calendar/ViewSwitcher';
 import { DayView } from '../components/calendar/DayView';
 import { WeekView } from '../components/calendar/WeekView';
 import { MonthView } from '../components/calendar/MonthView';
 import { StatusChip } from '../components/StatusChip';
+import { AssignStaffModal } from '../components/calendar/AssignStaffModal';
 import { useEventStream } from '../hooks/useEventStream';
 import { ADMIN_ROLE_SET, ROLE_OPTIONS } from '../constants/roles';
-import type { Role, ShiftEvent, StaffMember } from '../types';
+import { timeInputToMinutes } from '../utils/time';
+import type { Assignment, Role, ShiftEvent, ShiftTemplate, StaffMember } from '../types';
 
 type ViewMode = 'day' | 'week' | 'month';
 
@@ -33,13 +36,38 @@ const calculateWeekStart = (source: Date) => {
 
 const shiftIdFromEvent = (event: ShiftEvent | null) => event?.id ?? '';
 
+type AssignmentTarget =
+  | { type: 'shift'; shift: ShiftEvent }
+  | { type: 'template'; template: ShiftTemplate; date: Date };
+
+const buildSegmentWindow = (template: ShiftTemplate, date: Date) => {
+  const base = new Date(date);
+  base.setHours(0, 0, 0, 0);
+  const startMinutes = timeInputToMinutes(template.start_time);
+  const endMinutes = timeInputToMinutes(template.end_time);
+  const start = new Date(base);
+  start.setMinutes(startMinutes);
+  const end = new Date(base);
+  end.setMinutes(endMinutes);
+  if (endMinutes <= startMinutes) {
+    end.setDate(end.getDate() + 1);
+  }
+  return { start, end };
+};
+
+const formatTimeRange = (start: Date, end: Date) =>
+  `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  })}`;
+
 export const CalendarPage = () => {
   const { selectedAccount } = useAccountContext();
-  const { currentStaff } = useAuth();
+  const { currentStaff, loading: authLoading, isAuthenticated } = useAuth();
   const { setShifts, setAssignments, setKids } = useScheduleStore();
   const queryClient = useQueryClient();
   const isAdmin = currentStaff ? ADMIN_ROLE_SET.has(currentStaff.role) : false;
-  const accountId = selectedAccount?.id ?? '';
+  const accountId = !authLoading && isAuthenticated ? selectedAccount?.id ?? '' : '';
 
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [focusDate, setFocusDate] = useState(() => new Date());
@@ -47,6 +75,9 @@ export const CalendarPage = () => {
   const [message, setMessage] = useState('');
   const [connectedIds, setConnectedIds] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [assignmentTarget, setAssignmentTarget] = useState<AssignmentTarget | null>(null);
+  const [assignmentFeedback, setAssignmentFeedback] = useState<string | null>(null);
+  const [assignmentError, setAssignmentError] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all');
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
 
@@ -131,6 +162,33 @@ export const CalendarPage = () => {
     },
   );
 
+  const assignmentMutation = useMutation(
+    ({ shift, staffId }: { shift: ShiftEvent; staffId: string }) => {
+      if (shift.pendingAssignmentId) {
+        return updateAssignment(shift.pendingAssignmentId, { staff_id: staffId });
+      }
+      return createAssignment({
+        shift_id: shift.id,
+        staff_id: staffId,
+        title: 'Shift assignment',
+        difficulty_rating: 2,
+      });
+    },
+    {
+      onSuccess() {
+        setAssignmentFeedback('Staff assigned to shift.');
+        setAssignmentError(null);
+        setAssignmentTarget(null);
+        if (accountId) {
+          queryClient.invalidateQueries(['shifts', accountId]);
+        }
+      },
+      onError() {
+        setAssignmentError('Unable to assign staff to shift.');
+      },
+    },
+  );
+
   const handleRequestCoverage = useCallback(
     (shift: ShiftEvent) => {
       setActiveShift(shift);
@@ -167,6 +225,80 @@ export const CalendarPage = () => {
     });
   };
 
+  const openAssignmentModal = useCallback((target: AssignmentTarget) => {
+    setAssignmentTarget(target);
+    setAssignmentError(null);
+    setAssignmentFeedback(null);
+  }, []);
+
+  const closeAssignmentModal = useCallback(() => {
+    setAssignmentTarget(null);
+  }, []);
+
+  const handleAssignShift = useCallback(
+    (shift: ShiftEvent) => {
+      openAssignmentModal({ type: 'shift', shift });
+    },
+    [openAssignmentModal],
+  );
+
+  const handleAssignTemplate = useCallback(
+    (template: ShiftTemplate, date: Date) => {
+      openAssignmentModal({ type: 'template', template, date });
+    },
+    [openAssignmentModal],
+  );
+
+  const handleAssignStaff = useCallback(
+    async (staffId: string) => {
+      if (!assignmentTarget) {
+        return;
+      }
+      setAssignmentError(null);
+      if (assignmentTarget.type === 'shift') {
+        assignmentMutation.mutate({ shift: assignmentTarget.shift, staffId });
+        return;
+      }
+      if (!accountId) {
+        setAssignmentError('Unable to locate account context.');
+        return;
+      }
+      const { template, date } = assignmentTarget;
+      const { start, end } = buildSegmentWindow(template, date);
+      setAssignmentFeedback('Creating shift…');
+      try {
+        const response = await createShift({
+          account_group_id: accountId,
+          site: template.label || 'Shift',
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          ratio_min: 1,
+          leads_required: 1,
+          difficulty: 'medium',
+        });
+        const newShift: ShiftEvent = {
+          id: response.data.id,
+          account_group_id: accountId,
+          start_time: start.toISOString(),
+          end_time: end.toISOString(),
+          ratio_min: 1,
+          role: 'Staff',
+          difficulty: 'medium',
+          site: template.label ?? 'Shift',
+          is_special: false,
+          leadsRequired: 1,
+          assignments: [] as Assignment[],
+        };
+        assignmentMutation.mutate({ shift: newShift, staffId });
+        setAssignmentFeedback('Assigning staff…');
+      } catch {
+        setAssignmentError('Unable to create shift for this segment.');
+        setAssignmentFeedback(null);
+      }
+    },
+    [accountId, assignmentMutation, assignmentTarget],
+  );
+
   const dayShifts = useMemo(
     () => filteredShifts.filter((shift) => new Date(shift.start_time).toDateString() === focusDate.toDateString()),
     [focusDate, filteredShifts],
@@ -177,7 +309,7 @@ export const CalendarPage = () => {
     ['projectionSettings', accountId],
     () => fetchProjectionSettings(accountId),
     {
-      enabled: Boolean(accountId),
+      enabled: Boolean(accountId && !authLoading && isAuthenticated),
       refetchOnWindowFocus: false,
     },
   );
@@ -192,6 +324,8 @@ export const CalendarPage = () => {
           shifts={dayShifts}
           isAdmin={isAdmin}
           onRequestCoverage={handleRequestCoverage}
+          onAssignStaff={handleAssignShift}
+          onAssignTemplate={handleAssignTemplate}
           shiftTemplates={shiftTemplates}
           staffMembers={staffList}
         />
@@ -204,6 +338,8 @@ export const CalendarPage = () => {
           shifts={filteredShifts}
           isAdmin={isAdmin}
           onRequestCoverage={handleRequestCoverage}
+          onAssignStaff={handleAssignShift}
+          onAssignTemplate={handleAssignTemplate}
           shiftTemplates={shiftTemplates}
           staffMembers={staffList}
         />
@@ -215,11 +351,43 @@ export const CalendarPage = () => {
         shifts={filteredShifts}
         isAdmin={isAdmin}
         onRequestCoverage={handleRequestCoverage}
+        onAssignStaff={handleAssignShift}
+        onAssignTemplate={handleAssignTemplate}
         staffMembers={staffList}
         shiftTemplates={shiftTemplates}
       />
     );
-  }, [dayShifts, focusDate, handleRequestCoverage, isAdmin, shiftTemplates, viewMode, staffList, weekStart, shifts]);
+  }, [dayShifts, focusDate, handleRequestCoverage, isAdmin, handleAssignShift, handleAssignTemplate, shiftTemplates, viewMode, staffList, weekStart, shifts]);
+
+  const modalContext = useMemo(() => {
+    if (!assignmentTarget) {
+      return null;
+    }
+    if (assignmentTarget.type === 'shift') {
+      const { shift } = assignmentTarget;
+      const start = new Date(shift.start_time);
+      const end = new Date(shift.end_time);
+      const assignedStaffIds = (shift.assignments ?? [])
+        .map((assignment) => assignment.staff_id)
+        .filter(Boolean) as string[];
+      return {
+        site: shift.site,
+        timeRange: formatTimeRange(start, end),
+        ratioMin: shift.ratio_min ?? 1,
+        assignedStaffIds,
+        note: shift.pendingAssignmentId ? 'Open slot ready' : 'Creates a new assignment slot',
+      };
+    }
+    const { template, date } = assignmentTarget;
+    const { start, end } = buildSegmentWindow(template, date);
+    return {
+      site: template.label || 'Shift template',
+      timeRange: formatTimeRange(start, end),
+      ratioMin: 1,
+      assignedStaffIds: [],
+      note: 'Creates a new shift and assignment slot',
+    };
+  }, [assignmentTarget]);
 
   return (
     <section className="space-y-8">
@@ -289,6 +457,7 @@ export const CalendarPage = () => {
       {coverageMutation.isIdle || coverageMutation.isLoading ? null : feedback ? (
         <p className="text-xs text-emerald-400">{feedback}</p>
       ) : null}
+      {assignmentFeedback && <p className="text-xs text-emerald-400">{assignmentFeedback}</p>}
 
       {activeShift && (
         <div className="rounded-2xl border border-dashed border-slate-800/40 bg-slate-900/60 p-4">
@@ -332,6 +501,21 @@ export const CalendarPage = () => {
             {coverageMutation.isLoading && <p className="text-xs text-slate-400">Sending...</p>}
           </div>
         </div>
+      )}
+
+      {modalContext && (
+        <AssignStaffModal
+          site={modalContext.site}
+          timeRange={modalContext.timeRange}
+          ratioMin={modalContext.ratioMin}
+          assignedStaffIds={modalContext.assignedStaffIds}
+          note={modalContext.note}
+          staffMembers={staffList}
+          onClose={closeAssignmentModal}
+          onAssign={handleAssignStaff}
+          isLoading={assignmentMutation.isLoading}
+          errorMessage={assignmentError}
+        />
       )}
 
       <div className="space-y-6">

@@ -7,9 +7,16 @@ interface ShiftBlockProps {
   staffById: Record<string, StaffMember>;
   isAdmin: boolean;
   onRequestCoverage?: (shift: ShiftEvent) => void;
+  onAssignStaff?: (shift: ShiftEvent) => void;
 }
 
-export const ShiftBlock = ({ shift, staffById, isAdmin, onRequestCoverage }: ShiftBlockProps) => {
+export const ShiftBlock = ({
+  shift,
+  staffById,
+  isAdmin,
+  onRequestCoverage,
+  onAssignStaff,
+}: ShiftBlockProps) => {
   const start = new Date(shift.start_time);
   const end = new Date(shift.end_time);
   const duration = ((end.getTime() - start.getTime()) / 36_0000).toFixed(1);
@@ -32,15 +39,26 @@ export const ShiftBlock = ({ shift, staffById, isAdmin, onRequestCoverage }: Shi
         <p className="text-xs text-slate-400">{duration}h</p>
       </div>
       <StaffList assignments={assigned} staffById={staffById} fallbackRole={shift.role} />
-      {isAdmin && onRequestCoverage && (
-        <div className="mt-4 flex items-center justify-end">
-          <button
-            type="button"
-            onClick={() => onRequestCoverage(shift)}
-            className="rounded-2xl border border-transparent bg-gradient-to-r from-brand-500 to-brand-700 px-3 py-2 text-xs font-semibold uppercase tracking-[0.4em] text-white transition hover:opacity-90"
-          >
-            Request coverage
-          </button>
+      {isAdmin && (
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+          {onAssignStaff && (
+            <button
+              type="button"
+              onClick={() => onAssignStaff(shift)}
+              className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.4em] text-white transition hover:border-white/40"
+            >
+              Assign staff
+            </button>
+          )}
+          {onRequestCoverage && (
+            <button
+              type="button"
+              onClick={() => onRequestCoverage(shift)}
+              className="rounded-2xl border border-transparent bg-gradient-to-r from-brand-500 to-brand-700 px-3 py-2 text-xs font-semibold uppercase tracking-[0.4em] text-white transition hover:opacity-90"
+            >
+              Request coverage
+            </button>
+          )}
         </div>
       )}
     </article>

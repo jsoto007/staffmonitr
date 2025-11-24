@@ -149,15 +149,16 @@ const formatDayList = (days: string[] = []) => {
 
 export const ProjectionSettingsPage = () => {
   const { selectedAccount } = useAccountContext();
-  const { currentStaff } = useAuth();
+  const { currentStaff, loading: authLoading, isAuthenticated } = useAuth();
   const accountId = selectedAccount?.id;
   const isAdmin = currentStaff ? ADMIN_ROLE_SET.has(currentStaff.role) : false;
+  const queriesEnabled = Boolean(!authLoading && isAuthenticated && accountId && isAdmin);
 
   const { data: projectionSettings, isLoading: settingsLoading } = useQuery(
     ['projectionSettings', accountId],
     () => fetchProjectionSettings(accountId as string),
     {
-      enabled: Boolean(accountId && isAdmin),
+      enabled: queriesEnabled,
       refetchOnWindowFocus: false,
     },
   );
@@ -166,7 +167,7 @@ export const ProjectionSettingsPage = () => {
     data: staffList = [],
     isFetching: staffLoading,
   } = useQuery(['accountStaff', accountId], () => fetchAccountStaff(accountId as string), {
-    enabled: Boolean(accountId && isAdmin),
+    enabled: queriesEnabled,
     refetchOnWindowFocus: false,
   });
 

@@ -13,6 +13,8 @@ interface CalendarDayProps {
   staffMembers: StaffMember[];
   isAdmin: boolean;
   onRequestCoverage: (shift: ShiftEvent) => void;
+  onAssignStaff?: (shift: ShiftEvent) => void;
+  onAssignTemplate?: (template: ShiftTemplate, date: Date) => void;
   showHeader?: boolean;
   className?: string;
 }
@@ -38,6 +40,8 @@ export const CalendarDay = ({
   staffMembers,
   isAdmin,
   onRequestCoverage,
+  onAssignStaff,
+  onAssignTemplate,
   showHeader = true,
 }: CalendarDayProps) => {
   const staffLookup = useMemo(() => {
@@ -64,6 +68,10 @@ export const CalendarDay = ({
     return { templateGroups: templateMap, unassigned };
   }, [shiftTemplates, shifts]);
 
+  const handleTemplateAssign = (template: ShiftTemplate) => {
+    onAssignTemplate?.(template, date);
+  };
+
   return (
     <section className={clsx('space-y-4 rounded-3xl border border-white/10 bg-slate-950/50 p-4 shadow-inner shadow-black/40', className)}>
       {showHeader && (
@@ -88,6 +96,8 @@ export const CalendarDay = ({
               staffById={staffLookup}
               isAdmin={isAdmin}
               onRequestCoverage={onRequestCoverage}
+              onAssignStaff={onAssignStaff}
+              onAssignTemplate={handleTemplateAssign}
             />
           ))}
           {grouped.unassigned.length > 0 && (
@@ -105,6 +115,7 @@ export const CalendarDay = ({
                       staffById={staffLookup}
                       isAdmin={isAdmin}
                       onRequestCoverage={onRequestCoverage}
+                      onAssignStaff={onAssignStaff}
                     />
                   ))}
               </div>
@@ -127,6 +138,7 @@ export const CalendarDay = ({
                 staffById={staffLookup}
                 isAdmin={isAdmin}
                 onRequestCoverage={onRequestCoverage}
+                onAssignStaff={onAssignStaff}
               />
             ))}
         </div>

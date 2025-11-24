@@ -11,9 +11,19 @@ interface ShiftContainerProps {
   staffById: Record<string, StaffMember>;
   isAdmin: boolean;
   onRequestCoverage: (shift: ShiftEvent) => void;
+  onAssignStaff?: (shift: ShiftEvent) => void;
+  onAssignTemplate?: (template: ShiftTemplate) => void;
 }
 
-export const ShiftContainer = ({ template, shifts, staffById, isAdmin, onRequestCoverage }: ShiftContainerProps) => {
+export const ShiftContainer = ({
+  template,
+  shifts,
+  staffById,
+  isAdmin,
+  onRequestCoverage,
+  onAssignStaff,
+  onAssignTemplate,
+}: ShiftContainerProps) => {
   const accentColor = template.color ?? SHIFT_WINDOW_COLOR_SCHEMES[template.order % SHIFT_WINDOW_COLOR_SCHEMES.length].accent;
   const sortedShifts = useMemo(
     () =>
@@ -48,9 +58,26 @@ export const ShiftContainer = ({ template, shifts, staffById, isAdmin, onRequest
       </div>
       <div className="mt-3 space-y-3">
         {sortedShifts.length === 0 ? (
-          <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-5 text-sm text-slate-400">
-            No shifts scheduled for this segment yet.
-          </p>
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onAssignTemplate?.(template)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onAssignTemplate?.(template);
+              }
+            }}
+            className="flex flex-col gap-3 rounded-3xl border border-dashed border-white/10 bg-slate-900/60 px-4 py-5 text-sm text-slate-400 transition hover:border-white/30 hover:bg-slate-900/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 focus-visible:ring-1 focus-visible:ring-brand-500"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-semibold uppercase tracking-[0.3em] text-[10px] text-slate-400">No shifts yet</p>
+              <span className="text-xs font-semibold uppercase tracking-[0.3em] text-white">Add staff</span>
+            </div>
+            <div className="rounded-2xl border border-white/5 bg-slate-950/40 px-4 py-3 text-sm text-slate-400">
+              Click to open the staff cart and assign coverage for this segment.
+            </div>
+          </div>
         ) : (
           sortedShifts.map((shift) => (
             <ShiftBlock
@@ -59,6 +86,7 @@ export const ShiftContainer = ({ template, shifts, staffById, isAdmin, onRequest
               staffById={staffById}
               isAdmin={isAdmin}
               onRequestCoverage={onRequestCoverage}
+              onAssignStaff={onAssignStaff}
             />
           ))
         )}
