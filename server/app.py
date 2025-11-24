@@ -17,8 +17,8 @@ from server.routes import register_routes
 def create_app():
     dist_dir = project_root / "client" / "dist"
     static_folder = str(dist_dir) if dist_dir.exists() else None
-    # Serve built client from Vite dist if present
-    app = Flask(__name__, static_folder=static_folder, static_url_path="/")
+    # Serve built client assets from /static to avoid root collisions with SPA routes
+    app = Flask(__name__, static_folder=static_folder, static_url_path="/static")
     app.config.from_object(Config)
     db.init_app(app)
     migrate.init_app(app, db)
