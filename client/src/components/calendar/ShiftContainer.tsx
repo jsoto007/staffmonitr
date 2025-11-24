@@ -13,6 +13,7 @@ interface ShiftContainerProps {
   onRequestCoverage: (shift: ShiftEvent) => void;
   onAssignStaff?: (shift: ShiftEvent) => void;
   onAssignTemplate?: (template: ShiftTemplate) => void;
+  onRemoveAssignment?: (assignmentId: string) => void;
 }
 
 export const ShiftContainer = ({
@@ -23,6 +24,7 @@ export const ShiftContainer = ({
   onRequestCoverage,
   onAssignStaff,
   onAssignTemplate,
+  onRemoveAssignment,
 }: ShiftContainerProps) => {
   const accentColor = template.color ?? SHIFT_WINDOW_COLOR_SCHEMES[template.order % SHIFT_WINDOW_COLOR_SCHEMES.length].accent;
   const sortedShifts = useMemo(
@@ -87,6 +89,7 @@ export const ShiftContainer = ({
               isAdmin={isAdmin}
               onRequestCoverage={onRequestCoverage}
               onAssignStaff={onAssignStaff}
+              onRemoveAssignment={onRemoveAssignment}
             />
           ))
         )}

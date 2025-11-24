@@ -15,6 +15,7 @@ interface CalendarDayProps {
   onRequestCoverage: (shift: ShiftEvent) => void;
   onAssignStaff?: (shift: ShiftEvent) => void;
   onAssignTemplate?: (template: ShiftTemplate, date: Date) => void;
+  onRemoveAssignment?: (assignmentId: string) => void;
   showHeader?: boolean;
   className?: string;
 }
@@ -42,6 +43,7 @@ export const CalendarDay = ({
   onRequestCoverage,
   onAssignStaff,
   onAssignTemplate,
+  onRemoveAssignment,
   showHeader = true,
 }: CalendarDayProps) => {
   const staffLookup = useMemo(() => {
@@ -98,6 +100,7 @@ export const CalendarDay = ({
               onRequestCoverage={onRequestCoverage}
               onAssignStaff={onAssignStaff}
               onAssignTemplate={handleTemplateAssign}
+              onRemoveAssignment={onRemoveAssignment}
             />
           ))}
           {grouped.unassigned.length > 0 && (
@@ -116,6 +119,7 @@ export const CalendarDay = ({
                       isAdmin={isAdmin}
                       onRequestCoverage={onRequestCoverage}
                       onAssignStaff={onAssignStaff}
+                      onRemoveAssignment={onRemoveAssignment}
                     />
                   ))}
               </div>

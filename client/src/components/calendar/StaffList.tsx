@@ -4,9 +4,11 @@ interface StaffListProps {
   assignments: Assignment[];
   staffById: Record<string, StaffMember>;
   fallbackRole?: string;
+  onRemoveAssignment?: (assignmentId: string) => void;
+  allowRemove?: boolean;
 }
 
-export const StaffList = ({ assignments, staffById, fallbackRole }: StaffListProps) => {
+export const StaffList = ({ assignments, staffById, fallbackRole, onRemoveAssignment, allowRemove }: StaffListProps) => {
   if (!assignments.length) {
     return <p className="mt-3 text-sm text-slate-400">No staff assigned yet.</p>;
   }
@@ -28,7 +30,18 @@ export const StaffList = ({ assignments, staffById, fallbackRole }: StaffListPro
                 {assignment.title} · Difficulty {assignment.difficulty}
               </p>
             </div>
-            <span className="text-[11px] uppercase tracking-[0.4em] text-slate-400">{assignment.staffRole ?? fallbackRole ?? 'Staff'}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] uppercase tracking-[0.4em] text-slate-400">{assignment.staffRole ?? fallbackRole ?? 'Staff'}</span>
+              {allowRemove && onRemoveAssignment && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveAssignment(assignment.id)}
+                  className="rounded-xl border border-white/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-slate-300 transition hover:border-rose-300/50 hover:text-white"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         );
       })}

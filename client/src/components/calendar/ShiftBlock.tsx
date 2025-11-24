@@ -8,6 +8,7 @@ interface ShiftBlockProps {
   isAdmin: boolean;
   onRequestCoverage?: (shift: ShiftEvent) => void;
   onAssignStaff?: (shift: ShiftEvent) => void;
+  onRemoveAssignment?: (assignmentId: string) => void;
 }
 
 export const ShiftBlock = ({
@@ -16,6 +17,7 @@ export const ShiftBlock = ({
   isAdmin,
   onRequestCoverage,
   onAssignStaff,
+  onRemoveAssignment,
 }: ShiftBlockProps) => {
   const start = new Date(shift.start_time);
   const end = new Date(shift.end_time);
@@ -38,7 +40,13 @@ export const ShiftBlock = ({
         </div>
         <p className="text-xs text-slate-400">{duration}h</p>
       </div>
-      <StaffList assignments={assigned} staffById={staffById} fallbackRole={shift.role} />
+      <StaffList
+        assignments={assigned}
+        staffById={staffById}
+        fallbackRole={shift.role}
+        allowRemove={isAdmin && Boolean(onRemoveAssignment)}
+        onRemoveAssignment={onRemoveAssignment}
+      />
       {isAdmin && (
         <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
           {onAssignStaff && (

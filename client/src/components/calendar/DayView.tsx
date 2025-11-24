@@ -10,6 +10,7 @@ interface DayViewProps {
   onRequestCoverage: (shift: ShiftEvent) => void;
   onAssignStaff?: (shift: ShiftEvent) => void;
   onAssignTemplate?: (template: ShiftTemplate, date: Date) => void;
+  onRemoveAssignment?: (assignmentId: string) => void;
 }
 
 export const DayView = ({
@@ -21,6 +22,7 @@ export const DayView = ({
   onRequestCoverage,
   onAssignStaff,
   onAssignTemplate,
+  onRemoveAssignment,
 }: DayViewProps) => (
     <CalendarDay
       date={date}
@@ -31,5 +33,6 @@ export const DayView = ({
       onRequestCoverage={onRequestCoverage}
       onAssignStaff={onAssignStaff}
       onAssignTemplate={onAssignTemplate}
+      onRemoveAssignment={onRemoveAssignment}
     />
   );

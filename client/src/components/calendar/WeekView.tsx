@@ -10,6 +10,7 @@ interface WeekViewProps {
   onRequestCoverage: (shift: ShiftEvent) => void;
   onAssignStaff?: (shift: ShiftEvent) => void;
   onAssignTemplate?: (template: ShiftTemplate, date: Date) => void;
+  onRemoveAssignment?: (assignmentId: string) => void;
 }
 
 const formatDayLabel = (date: Date) => date.toLocaleDateString([], { weekday: 'short', day: 'numeric' });
@@ -23,6 +24,7 @@ export const WeekView = ({
   onRequestCoverage,
   onAssignStaff,
   onAssignTemplate,
+  onRemoveAssignment,
 }: WeekViewProps) => {
   const weekDays = Array.from({ length: 7 }).map((_, index) => {
     const date = new Date(weekStart);
@@ -47,6 +49,7 @@ export const WeekView = ({
           onRequestCoverage={onRequestCoverage}
           onAssignStaff={onAssignStaff}
           onAssignTemplate={onAssignTemplate}
+          onRemoveAssignment={onRemoveAssignment}
         />
       ))}
     </div>

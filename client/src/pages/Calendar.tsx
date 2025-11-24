@@ -7,7 +7,7 @@ import { useScheduleStore } from '../stores/scheduleStore';
 import { fetchShifts, requestShiftCoverage, createShift } from '../services/shifts';
 import { fetchAccountStaff } from '../services/staff';
 import { fetchProjectionSettings } from '../services/projectionSettings';
-import { createAssignment, updateAssignment } from '../services/assignments';
+import { createAssignment, updateAssignment, deleteAssignment } from '../services/assignments';
 import { ViewSwitcher } from '../components/calendar/ViewSwitcher';
 import { DayView } from '../components/calendar/DayView';
 import { WeekView } from '../components/calendar/WeekView';
@@ -78,6 +78,7 @@ export const CalendarPage = () => {
   const [assignmentTarget, setAssignmentTarget] = useState<AssignmentTarget | null>(null);
   const [assignmentFeedback, setAssignmentFeedback] = useState<string | null>(null);
   const [assignmentError, setAssignmentError] = useState<string | null>(null);
+  const [removingAssignmentId, setRemovingAssignmentId] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all');
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
 
@@ -189,6 +190,26 @@ export const CalendarPage = () => {
     },
   );
 
+  const removeAssignmentMutation = useMutation((assignmentId: string) => deleteAssignment(assignmentId), {
+    onMutate(assignmentId) {
+      setRemovingAssignmentId(assignmentId);
+      setAssignmentError(null);
+      setAssignmentFeedback(null);
+    },
+    onSuccess() {
+      setAssignmentFeedback('Assignment removed.');
+      if (accountId) {
+        queryClient.invalidateQueries(['shifts', accountId]);
+      }
+    },
+    onError() {
+      setAssignmentError('Unable to remove assignment.');
+    },
+    onSettled() {
+      setRemovingAssignmentId(null);
+    },
+  });
+
   const handleRequestCoverage = useCallback(
     (shift: ShiftEvent) => {
       setActiveShift(shift);
@@ -247,6 +268,16 @@ export const CalendarPage = () => {
       openAssignmentModal({ type: 'template', template, date });
     },
     [openAssignmentModal],
+  );
+
+  const handleRemoveAssignment = useCallback(
+    (assignmentId: string) => {
+      if (removingAssignmentId === assignmentId || removeAssignmentMutation.isLoading) {
+        return;
+      }
+      removeAssignmentMutation.mutate(assignmentId);
+    },
+    [removeAssignmentMutation, removingAssignmentId],
   );
 
   const handleAssignStaff = useCallback(
@@ -326,6 +357,7 @@ export const CalendarPage = () => {
           onRequestCoverage={handleRequestCoverage}
           onAssignStaff={handleAssignShift}
           onAssignTemplate={handleAssignTemplate}
+          onRemoveAssignment={handleRemoveAssignment}
           shiftTemplates={shiftTemplates}
           staffMembers={staffList}
         />
@@ -340,6 +372,7 @@ export const CalendarPage = () => {
           onRequestCoverage={handleRequestCoverage}
           onAssignStaff={handleAssignShift}
           onAssignTemplate={handleAssignTemplate}
+          onRemoveAssignment={handleRemoveAssignment}
           shiftTemplates={shiftTemplates}
           staffMembers={staffList}
         />
@@ -353,11 +386,12 @@ export const CalendarPage = () => {
         onRequestCoverage={handleRequestCoverage}
         onAssignStaff={handleAssignShift}
         onAssignTemplate={handleAssignTemplate}
+        onRemoveAssignment={handleRemoveAssignment}
         staffMembers={staffList}
         shiftTemplates={shiftTemplates}
       />
     );
-  }, [dayShifts, focusDate, handleRequestCoverage, isAdmin, handleAssignShift, handleAssignTemplate, shiftTemplates, viewMode, staffList, weekStart, shifts]);
+  }, [dayShifts, focusDate, handleRequestCoverage, isAdmin, handleAssignShift, handleAssignTemplate, handleRemoveAssignment, shiftTemplates, viewMode, staffList, weekStart, shifts]);
 
   const modalContext = useMemo(() => {
     if (!assignmentTarget) {
