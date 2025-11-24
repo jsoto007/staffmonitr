@@ -71,6 +71,9 @@ class ShiftTemplate(db.Model, TimestampMixin):
     end_minute = db.Column(db.Integer, nullable=False)
     color = db.Column(db.String(24))
     sort_order = db.Column(db.Integer, nullable=False)
+    category = db.Column(db.String(32), nullable=False, default='coverage')
+    role = db.Column(db.String(128))
+    days = db.Column(db.String(64), nullable=False, default='sun,mon,tue,wed,thu,fri,sat')
 
     projection_settings = db.relationship('ProjectionSettings', back_populates='shift_templates')
 

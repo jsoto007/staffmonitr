@@ -20,6 +20,9 @@ type ShiftCreationOptions = {
   start?: string;
   end?: string;
   color?: string;
+  category?: 'coverage' | 'role';
+  role?: string;
+  days?: string[];
 };
 
 type ShiftPreset = ShiftCreationOptions & {
@@ -61,41 +64,88 @@ const COVERAGE_OPTIONS: { value: CoverageMode; label: string; description: strin
 
 const SHIFT_COLOR_FALLBACK = SHIFT_WINDOW_COLOR_SCHEMES[0].accent;
 
+const WEEK_DAY_ORDER = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const DAY_OPTIONS = [
+  { key: 'sun', label: 'Su' },
+  { key: 'mon', label: 'Mo' },
+  { key: 'tue', label: 'Tu' },
+  { key: 'wed', label: 'We' },
+  { key: 'thu', label: 'Th' },
+  { key: 'fri', label: 'Fr' },
+  { key: 'sat', label: 'Sa' },
+];
+const DEFAULT_ROLE_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri'];
+
 const randomId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `temp-${Date.now()}`;
 
 const computeDuration = (start: number, end: number) => (end >= start ? end - start : end + 1440 - start);
 
-const validateShifts = (shifts: ShiftTemplate[]) => {
-  if (!shifts.length) {
-    return 'Define at least one shift segment to build coverage.';
+const validateCoverageSegments = (segments: ShiftTemplate[]) => {
+  if (!segments.length) {
+    return 'Define at least one coverage shift segment to build coverage.';
   }
-  const ordered = shifts.slice().sort((a, b) => a.order - b.order);
+  const ordered = segments.slice().sort((a, b) => a.order - b.order);
   for (let index = 0; index < ordered.length; index += 1) {
     const shift = ordered[index];
     const start = timeInputToMinutes(shift.start_time);
     const end = timeInputToMinutes(shift.end_time);
     if (start === end) {
-      return 'Each shift must span at least one minute.';
+      return 'Each coverage segment must span at least one minute.';
     }
     if (computeDuration(start, end) <= 0) {
-      return 'Shift end time must happen after the start time (wraparound supported).';
+      return 'Shift end time must be after the start time (wraparound supported).';
     }
     if (index > 0) {
       const prev = ordered[index - 1];
       const prevEnd = timeInputToMinutes(prev.end_time);
       if (start !== prevEnd) {
-        return 'Segments must connect directly—no gaps or overlaps.';
+        return 'Coverage segments must connect directly—no gaps or overlaps.';
       }
     }
   }
   return null;
 };
 
+const validateRoleSegments = (segments: ShiftTemplate[]) => {
+  for (const shift of segments) {
+    const start = timeInputToMinutes(shift.start_time);
+    const end = timeInputToMinutes(shift.end_time);
+    if (start === end) {
+      return 'Role-specific shifts must span at least one minute.';
+    }
+    if (computeDuration(start, end) <= 0) {
+      return 'Role-specific shift end time must be after the start time (wraparound supported).';
+    }
+    if (!shift.role) {
+      return 'Assign a role to every role-specific shift.';
+    }
+    if (!shift.days || !shift.days.length) {
+      return 'Select at least one day for role-specific shifts.';
+    }
+  }
+  return null;
+};
+
+const validateShifts = (shifts: ShiftTemplate[]) => {
+  const coverageSegments = shifts.filter((shift) => shift.category !== 'role');
+  const roleSegments = shifts.filter((shift) => shift.category === 'role');
+  return validateCoverageSegments(coverageSegments) ?? validateRoleSegments(roleSegments);
+};
+
 const getCoverageLabel = (mode: CoverageMode) =>
   mode === 'full_24h' ? 'Full 24-hour coverage' : 'Partial coverage';
 
 const getCoverageColor = (mode: CoverageMode) => (mode === 'full_24h' ? '#34d399' : '#facc15');
+
+const formatDayList = (days: string[] = []) => {
+  if (!days.length) {
+    return 'Daily';
+  }
+  return days
+    .map((day) => DAY_OPTIONS.find((entry) => entry.key === day)?.label ?? day.slice(0, 2).toUpperCase())
+    .join(' · ');
+};
 
 export const ProjectionSettingsPage = () => {
   const { selectedAccount } = useAccountContext();
@@ -175,14 +225,24 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
 
   const [scheduleFeedback, setScheduleFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [staffFeedback, setStaffFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [roleDraft, setRoleDraft] = useState({
+    role: ROLE_OPTIONS[0],
+    label: '',
+    start: '10:00',
+    end: '18:00',
+    color: SHIFT_COLOR_FALLBACK,
+    days: DEFAULT_ROLE_DAYS,
+  });
 
   const validationError = useMemo(() => validateShifts(shifts), [shifts]);
   const coverageSummary = useMemo(() => getCoverageLabel(coverageMode), [coverageMode]);
   const coverageChipLabel = coverageSummary;
   const coverageChipColor = getCoverageColor(coverageMode);
+  const coverageSegments = useMemo(() => shifts.filter((shift) => shift.category !== 'role'), [shifts]);
+  const roleSegments = useMemo(() => shifts.filter((shift) => shift.category === 'role'), [shifts]);
 
   const timelineSegments = useMemo(() => {
-    const ordered = [...shifts].sort((a, b) => a.order - b.order);
+    const ordered = [...coverageSegments].sort((a, b) => a.order - b.order);
     return ordered.map((shift, index) => {
       const startMinutes = timeInputToMinutes(shift.start_time);
       const endMinutes = timeInputToMinutes(shift.end_time);
@@ -195,7 +255,7 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
         timeRange: `${shift.start_time}–${shift.end_time}`,
       };
     });
-  }, [shifts]);
+  }, [coverageSegments]);
 
   const saveMutation = useMutation(
     (payload: { coverage_mode: CoverageMode; shifts: ShiftTemplate[] }) => updateProjectionSettings(accountId, payload),
@@ -239,18 +299,34 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
   );
 
   const handleAddShift = (options: ShiftCreationOptions = {}) => {
-    const lastShift = shifts[shifts.length - 1];
-    const lastEnd = lastShift ? timeInputToMinutes(lastShift.end_time) : 0;
-    const startMinutes = options.start ? timeInputToMinutes(options.start) : lastEnd % 1440;
+    const category = options.category === 'role' ? 'role' : 'coverage';
+    const lastCoverage = coverageSegments[coverageSegments.length - 1];
+    const lastEnd = lastCoverage ? timeInputToMinutes(lastCoverage.end_time) : 0;
+    const startMinutes =
+      options.start != null
+        ? timeInputToMinutes(options.start)
+        : category === 'coverage'
+        ? lastEnd % 1440
+        : 0;
     const endMinutes =
-      options.end != null ? timeInputToMinutes(options.end) : (startMinutes + DEFAULT_SEGMENT_DURATION) % 1440;
+      options.end != null
+        ? timeInputToMinutes(options.end)
+        : (startMinutes + DEFAULT_SEGMENT_DURATION) % 1440;
+    const baseDays = options.days ?? (category === 'role' ? DEFAULT_ROLE_DAYS : WEEK_DAY_ORDER);
     const newShift: ShiftTemplate = {
       id: randomId(),
-      label: options.label || `Shift ${shifts.length + 1}`,
+      label:
+        options.label ||
+        (category === 'role'
+        ? `${options.role || 'Role'} • ${roleSegments.length + 1}`
+        : `Shift ${coverageSegments.length + 1}`),
       start_time: minutesToTimeInput(startMinutes),
       end_time: minutesToTimeInput(endMinutes),
       color: options.color || SHIFT_COLOR_FALLBACK,
       order: shifts.length,
+      category,
+      role: options.role,
+      days: baseDays,
     };
     runShiftAction({ type: 'add', shift: newShift });
     setScheduleFeedback(null);
@@ -265,13 +341,61 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
     setScheduleFeedback(null);
   };
 
+  const handleRoleShiftRoleChange = (id: string, role: string) => {
+    runShiftAction({ type: 'update', id, updates: { role } });
+    setScheduleFeedback(null);
+  };
+
+  const handleRoleShiftDaysToggle = (id: string, day: string) => {
+    const shift = shifts.find((entry) => entry.id === id);
+    if (!shift) {
+      return;
+    }
+    const currentDays = shift.days ?? [];
+    const hasDay = currentDays.includes(day);
+    const updatedDays = hasDay ? currentDays.filter((entry) => entry !== day) : [...currentDays, day];
+    runShiftAction({ type: 'update', id, updates: { days: updatedDays } });
+    setScheduleFeedback(null);
+  };
+
+  const handleRoleDraftChange = (updates: Partial<typeof roleDraft>) => {
+    setRoleDraft((prev) => ({ ...prev, ...updates }));
+  };
+
+  const handleAddRoleShift = () => {
+    if (!roleDraft.days.length) {
+      setScheduleFeedback({ type: 'error', message: 'Select at least one day for role shifts.' });
+      return;
+    }
+    handleAddShift({
+      category: 'role',
+      role: roleDraft.role,
+      label: roleDraft.label || `${roleDraft.role} shift`,
+      start: roleDraft.start,
+      end: roleDraft.end,
+      color: roleDraft.color,
+      days: roleDraft.days,
+    });
+    handleRoleDraftChange({ label: '' });
+  };
+
   const handleMoveShift = (id: string, direction: 'up' | 'down') => {
-    const currentIndex = shifts.findIndex((shift) => shift.id === id);
+    const currentIndex = coverageSegments.findIndex((shift) => shift.id === id);
     if (currentIndex === -1) {
       return;
     }
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-    runShiftAction({ type: 'swap', fromIndex: currentIndex, toIndex: targetIndex });
+    if (targetIndex < 0 || targetIndex >= coverageSegments.length) {
+      return;
+    }
+    const fromId = coverageSegments[currentIndex].id;
+    const toId = coverageSegments[targetIndex].id;
+    const fromIndex = shifts.findIndex((shift) => shift.id === fromId);
+    const toIndex = shifts.findIndex((shift) => shift.id === toId);
+    if (fromIndex === -1 || toIndex === -1) {
+      return;
+    }
+    runShiftAction({ type: 'swap', fromIndex, toIndex });
     setScheduleFeedback(null);
   };
 
@@ -285,15 +409,21 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
       setScheduleFeedback({ type: 'error', message: validationError });
       return;
     }
+    const coverageOrder = new Map<string, number>();
+    coverageSegments.forEach((shift, index) => coverageOrder.set(shift.id, index));
+    roleSegments.forEach((shift, index) => coverageOrder.set(shift.id, coverageSegments.length + index));
     const payload = {
       coverage_mode: coverageMode,
-      shifts: shifts.map((shift, index) => ({
+      shifts: shifts.map((shift) => ({
         id: shift.id,
         label: shift.label,
         start_time: shift.start_time,
         end_time: shift.end_time,
         color: shift.color,
-        order: index,
+        order: coverageOrder.get(shift.id) ?? 0,
+        category: shift.category ?? 'coverage',
+        role: shift.role,
+        days: shift.days,
       })),
     };
     saveMutation.mutate(payload);
@@ -315,8 +445,15 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <StatusChip label={`${shifts.length} segment${shifts.length === 1 ? '' : 's'}`} color="#a855f7" />
+          <StatusChip
+            label={`${coverageSegments.length} coverage segment${coverageSegments.length === 1 ? '' : 's'}`}
+            color="#a855f7"
+          />
           <StatusChip label={coverageChipLabel} color={coverageChipColor} />
+          <StatusChip
+            label={`${roleSegments.length} role template${roleSegments.length === 1 ? '' : 's'}`}
+            color="#38bdf8"
+          />
         </div>
       </header>
 
@@ -415,10 +552,10 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
           <div className="space-y-4">
             {settingsLoading && !hasProjectionSettings ? (
               <p className="text-sm text-slate-400">Loading shift templates…</p>
-            ) : shifts.length === 0 ? (
-              <p className="text-sm text-slate-400">No segments yet. Add one to start defining coverage.</p>
+            ) : coverageSegments.length === 0 ? (
+              <p className="text-sm text-slate-400">No coverage segments yet. Add one to start defining coverage.</p>
             ) : (
-              shifts.map((shift, index) => {
+              coverageSegments.map((shift, index) => {
                 const startMinutes = timeInputToMinutes(shift.start_time);
                 const endMinutes = timeInputToMinutes(shift.end_time);
                 const duration = computeDuration(startMinutes, endMinutes);
@@ -457,10 +594,10 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
                         <button
                           type="button"
                           onClick={() => handleMoveShift(shift.id, 'down')}
-                          disabled={index === shifts.length - 1}
+                          disabled={index === coverageSegments.length - 1}
                           className={clsx(
                             'rounded-2xl border px-3 py-2 text-[11px] transition',
-                            index === shifts.length - 1
+                            index === coverageSegments.length - 1
                               ? 'border-white/10 text-slate-500'
                               : 'border-white/20 text-white hover:border-white/40',
                           )}
@@ -529,6 +666,220 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
                 );
               })
             )}
+          </div>
+
+          <div className="space-y-6 border-t border-white/5 pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Role-specific needs</p>
+                <p className="text-sm text-slate-400">Track roles such as cooks, drivers, and clinicians independently.</p>
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-[0.3em] text-white">{roleSegments.length} template{roleSegments.length === 1 ? '' : 's'}</span>
+            </div>
+
+            <div className="rounded-3xl border border-white/10 bg-slate-900/60 p-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                  Role
+                  <select
+                    value={roleDraft.role}
+                    onChange={(event) => handleRoleDraftChange({ role: event.target.value })}
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                  >
+                    {ROLE_OPTIONS.map((option) => (
+                      <option key={option} value={option} className="bg-slate-900 text-white">
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                  Label
+                  <input
+                    type="text"
+                    value={roleDraft.label}
+                    onChange={(event) => handleRoleDraftChange({ label: event.target.value })}
+                    placeholder="Optional helper text"
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                  />
+                </label>
+                <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                  Start
+                  <input
+                    type="time"
+                    value={roleDraft.start}
+                    onChange={(event) => handleRoleDraftChange({ start: event.target.value })}
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                  />
+                </label>
+                <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                  End
+                  <input
+                    type="time"
+                    value={roleDraft.end}
+                    onChange={(event) => handleRoleDraftChange({ end: event.target.value })}
+                    className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                  />
+                </label>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Days</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {DAY_OPTIONS.map((day) => {
+                    const isSelected = roleDraft.days.includes(day.key);
+                    return (
+                      <button
+                        key={day.key}
+                        type="button"
+                        onClick={() => {
+                          const nextDays = roleDraft.days.includes(day.key)
+                            ? roleDraft.days.filter((entry) => entry !== day.key)
+                            : [...roleDraft.days, day.key];
+                          handleRoleDraftChange({ days: nextDays });
+                        }}
+                        className={clsx(
+                          'rounded-full border px-3 py-1 text-[11px] transition',
+                          isSelected
+                            ? 'border-brand-500 bg-brand-500/10 text-white'
+                            : 'border-white/10 text-slate-400 hover:border-white/30',
+                        )}
+                        aria-pressed={isSelected}
+                      >
+                        {day.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <label className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-slate-400">
+                  Color
+                  <input
+                    type="color"
+                    value={roleDraft.color}
+                    onChange={(event) => handleRoleDraftChange({ color: event.target.value })}
+                    className="h-10 w-10 rounded-2xl border border-white/10 p-0"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={handleAddRoleShift}
+                  className="rounded-2xl border border-white/20 bg-gradient-to-r from-slate-800/60 to-slate-900/70 px-4 py-2 text-sm font-semibold text-white transition hover:border-white/40"
+                >
+                  Add role shift
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {roleSegments.length === 0 ? (
+                <p className="text-sm text-slate-400">No role-specific templates yet.</p>
+              ) : (
+                roleSegments.map((shift, index) => {
+                const startMinutes = timeInputToMinutes(shift.start_time);
+                const endMinutes = timeInputToMinutes(shift.end_time);
+                const duration = computeDuration(startMinutes, endMinutes);
+                const accentColor = shift.color ?? SHIFT_COLOR_FALLBACK;
+                  return (
+                    <div
+                      key={shift.id}
+                      className="space-y-3 rounded-3xl border border-white/10 bg-slate-900/50 p-4 shadow-inner shadow-black/40"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-white">
+                            {shift.role ?? 'Role'} · {shift.label || `Template ${index + 1}`}
+                          </p>
+                          <p className="text-[11px] text-slate-400">{formatDayList(shift.days)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveShift(shift.id)}
+                          className="rounded-2xl border border-rose-500/70 px-3 py-2 text-[11px] text-rose-300 transition hover:border-rose-400"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                          Role
+                          <select
+                            value={shift.role ?? ROLE_OPTIONS[0]}
+                            onChange={(event) => handleRoleShiftRoleChange(shift.id, event.target.value)}
+                            className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                          >
+                            {ROLE_OPTIONS.map((option) => (
+                              <option key={option} value={option} className="bg-slate-900 text-white">
+                                {option}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                          Start
+                          <input
+                            type="time"
+                            value={shift.start_time}
+                            onChange={(event) => handleShiftFieldChange(shift.id, 'start_time', event.target.value)}
+                            className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                          />
+                        </label>
+                        <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                          End
+                          <input
+                            type="time"
+                            value={shift.end_time}
+                            onChange={(event) => handleShiftFieldChange(shift.id, 'end_time', event.target.value)}
+                            className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                          />
+                        </label>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Days</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {DAY_OPTIONS.map((day) => {
+                            const isSelected = shift.days?.includes(day.key);
+                            return (
+                              <button
+                                key={`${shift.id}-${day.key}`}
+                                type="button"
+                                onClick={() => handleRoleShiftDaysToggle(shift.id, day.key)}
+                                className={clsx(
+                                  'rounded-full border px-3 py-1 text-[11px] transition',
+                                  isSelected
+                                    ? 'border-brand-500 bg-brand-500/10 text-white'
+                                    : 'border-white/10 text-slate-400 hover:border-white/30',
+                                )}
+                                aria-pressed={Boolean(isSelected)}
+                              >
+                                {day.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>
+                          {shift.start_time}–{shift.end_time}
+                        </span>
+                        <span>
+                          {Math.floor(duration / 60)}h {duration % 60}m
+                        </span>
+                      </div>
+                      <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                        Color
+                        <input
+                          type="color"
+                          value={shift.color ?? SHIFT_COLOR_FALLBACK}
+                          onChange={(event) => handleShiftFieldChange(shift.id, 'color', event.target.value)}
+                          className="mt-1 h-10 w-16 rounded-2xl border border-white/10 p-0"
+                        />
+                      </label>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">

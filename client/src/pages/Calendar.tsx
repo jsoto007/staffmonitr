@@ -13,8 +13,8 @@ import { WeekView } from '../components/calendar/WeekView';
 import { MonthView } from '../components/calendar/MonthView';
 import { StatusChip } from '../components/StatusChip';
 import { useEventStream } from '../hooks/useEventStream';
-import { ADMIN_ROLE_SET } from '../constants/roles';
-import type { ShiftEvent, StaffMember } from '../types';
+import { ADMIN_ROLE_SET, ROLE_OPTIONS } from '../constants/roles';
+import type { Role, ShiftEvent, StaffMember } from '../types';
 
 type ViewMode = 'day' | 'week' | 'month';
 
@@ -47,6 +47,8 @@ export const CalendarPage = () => {
   const [message, setMessage] = useState('');
   const [connectedIds, setConnectedIds] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all');
+  const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
 
   const { data: shifts = [], isLoading } = useQuery(
     ['shifts', accountId],
@@ -61,6 +63,21 @@ export const CalendarPage = () => {
       },
     },
   );
+
+  const filteredShifts = useMemo(() => {
+    return shifts.filter((shift) => {
+      if (roleFilter !== 'all' && shift.role !== roleFilter) {
+        return false;
+      }
+      if (staffFilter !== 'all') {
+        const assigned = shift.assignments ?? [];
+        if (!assigned.some((assignment) => assignment.staff_id === staffFilter)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [shifts, roleFilter, staffFilter]);
 
   const { data: staffList = [] } = useQuery(['accountStaff', accountId], () => fetchAccountStaff(accountId), {
     enabled: Boolean(accountId),
@@ -151,8 +168,8 @@ export const CalendarPage = () => {
   };
 
   const dayShifts = useMemo(
-    () => shifts.filter((shift) => new Date(shift.start_time).toDateString() === focusDate.toDateString()),
-    [focusDate, shifts],
+    () => filteredShifts.filter((shift) => new Date(shift.start_time).toDateString() === focusDate.toDateString()),
+    [focusDate, filteredShifts],
   );
   const weekStart = useMemo(() => calculateWeekStart(focusDate), [focusDate]);
 
@@ -184,7 +201,7 @@ export const CalendarPage = () => {
       return (
         <WeekView
           weekStart={weekStart}
-          shifts={shifts}
+          shifts={filteredShifts}
           isAdmin={isAdmin}
           onRequestCoverage={handleRequestCoverage}
           shiftTemplates={shiftTemplates}
@@ -195,7 +212,7 @@ export const CalendarPage = () => {
     return (
       <MonthView
         monthDate={focusDate}
-        shifts={shifts}
+        shifts={filteredShifts}
         isAdmin={isAdmin}
         onRequestCoverage={handleRequestCoverage}
         staffMembers={staffList}
@@ -230,6 +247,39 @@ export const CalendarPage = () => {
           <ViewSwitcher value={viewMode} onChange={(mode) => setViewMode(mode)} />
         </div>
       </header>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3 text-xs uppercase tracking-[0.3em] text-slate-400">
+        <label className="text-[10px]">
+          Role
+          <select
+            value={roleFilter}
+            onChange={(event) => setRoleFilter(event.target.value as Role | 'all')}
+            className="ml-2 rounded-2xl border border-white/10 bg-slate-900/50 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-white focus:border-white focus:outline-none"
+          >
+            <option value="all" className="bg-slate-900">All roles</option>
+            {ROLE_OPTIONS.map((role) => (
+              <option key={role} value={role} className="bg-slate-900">
+                {role}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[10px]">
+          Staff
+          <select
+            value={staffFilter}
+            onChange={(event) => setStaffFilter(event.target.value as string | 'all')}
+            className="ml-2 rounded-2xl border border-white/10 bg-slate-900/50 px-2 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-white focus:border-white focus:outline-none"
+          >
+            <option value="all" className="bg-slate-900">All staff</option>
+            {staffList.map((member) => (
+              <option key={member.id} value={member.id} className="bg-slate-900">
+                {member.full_name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <StatusChip label={viewMode} color={viewMode === 'month' ? '#38bdf8' : viewMode === 'week' ? '#a855f7' : '#f472b6'} />

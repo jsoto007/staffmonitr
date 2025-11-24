@@ -1,11 +1,25 @@
 from __future__ import with_statement
 
 import logging
+import os
+import sys
 from logging.config import fileConfig
 
-from flask import current_app
+from flask import current_app, has_app_context
 
 from alembic import context
+
+project_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if project_dir not in sys.path:
+    sys.path.insert(0, project_dir)
+from server.app import create_app
+
+# create an application to ensure current_app is available
+app = create_app()
+app_context = None
+if not has_app_context():
+    app_context = app.app_context()
+    app_context.push()
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -103,3 +117,6 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
+
+if app_context is not None:
+    app_context.pop()

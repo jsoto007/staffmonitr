@@ -43,6 +43,9 @@ export interface ShiftTemplate {
   end_time: string;
   color?: string | null;
   order: number;
+  category?: 'coverage' | 'role';
+  role?: string | null;
+  days?: string[];
 }
 
 export interface ProjectionSettings {

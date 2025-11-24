@@ -9,6 +9,10 @@ projection_settings_bp = Blueprint('projection_settings', __name__)
 
 ALLOWED_COVERAGE_MODES = {'full_24h', 'partial_coverage'}
 DEFAULT_COVERAGE_MODE = 'partial_coverage'
+ALLOWED_SHIFT_CATEGORIES = {'coverage', 'role'}
+DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+DEFAULT_SHIFT_DAYS = DAY_KEYS[:]
+VALID_DAY_SET = set(DAY_KEYS)
 MINUTES_PER_DAY = 24 * 60
 
 
@@ -43,13 +47,17 @@ def _serialize_shift(template: ShiftTemplate) -> dict:
         'end_time': _format_minutes(template.end_minute),
         'color': template.color,
         'order': template.sort_order,
+        'category': template.category or 'coverage',
+        'role': template.role,
+        'days': (template.days or '').split(',') if template.days else DEFAULT_SHIFT_DAYS,
     }
 
 
 def _validate_shift_sequence(shifts: list[dict]) -> None:
-    if not shifts:
+    coverage_shifts = [shift for shift in shifts if shift.get('category', 'coverage') == 'coverage']
+    if not coverage_shifts:
         return
-    ordered = sorted(shifts, key=lambda payload: payload.get('order', 0))
+    ordered = sorted(coverage_shifts, key=lambda payload: payload.get('order', 0))
     for shift in ordered:
         start = shift['start_minute']
         end = shift['end_minute']
@@ -60,7 +68,7 @@ def _validate_shift_sequence(shifts: list[dict]) -> None:
             raise ValueError('Each shift must cover at least one minute.')
     for current, next_shift in zip(ordered, ordered[1:]):
         if next_shift['start_minute'] != current['end_minute']:
-            raise ValueError('Shifts must connect without gaps or overlaps.')
+            raise ValueError('Segments must connect directly—no gaps or overlaps for coverage shifts.')
 
 
 def _get_projection_settings(account_id: str) -> ProjectionSettings:
@@ -84,6 +92,13 @@ def _build_shift_payload(raw: dict, index: int) -> dict:
     order = raw.get('order')
     if order is None:
         order = index
+    category = (raw.get('category') or 'coverage').strip().lower()
+    if category not in ALLOWED_SHIFT_CATEGORIES:
+        raise ValueError(f"category must be one of {', '.join(ALLOWED_SHIFT_CATEGORIES)}")
+    role = raw.get('role')
+    days_list = _parse_days(raw.get('days'), category)
+    if category == 'role' and not role:
+        raise ValueError('Role-specific shifts require a role to be assigned.')
     return {
         'id': raw.get('id'),
         'label': label,
@@ -91,7 +106,29 @@ def _build_shift_payload(raw: dict, index: int) -> dict:
         'end_minute': end_minute,
         'color': color,
         'order': order,
+        'category': category,
+        'role': role,
+        'days': ','.join(days_list),
     }
+
+
+def _parse_days(raw_days, category: str) -> list[str]:
+    if raw_days is None:
+        return DEFAULT_SHIFT_DAYS if category == 'coverage' else []
+    if not isinstance(raw_days, list):
+        raise ValueError('days must be an array of day codes.')
+    normalized = []
+    for entry in raw_days:
+        if not isinstance(entry, str):
+            raise ValueError('Day entries must be strings.')
+        day_key = entry.strip().lower()
+        if day_key not in VALID_DAY_SET:
+            raise ValueError(f'Unsupported day code "{entry}". Use {", ".join(DAY_KEYS)}.')
+        if day_key not in normalized:
+            normalized.append(day_key)
+    if category == 'role' and not normalized:
+        raise ValueError('Role-specific shifts require at least one day.')
+    return normalized if normalized else DEFAULT_SHIFT_DAYS
 
 
 @projection_settings_bp.route('/accounts/<account_id>/projection-settings', methods=['GET'])
@@ -160,6 +197,9 @@ def update_projection_settings(account_id: str, *, current_staff):
         template.end_minute = shift_spec['end_minute']
         template.color = shift_spec.get('color')
         template.sort_order = shift_spec['order']
+        template.category = shift_spec.get('category', 'coverage')
+        template.role = shift_spec.get('role')
+        template.days = shift_spec.get('days') or ','.join(DEFAULT_SHIFT_DAYS)
         kept_ids.add(template.id)
 
     for template in settings.shift_templates:

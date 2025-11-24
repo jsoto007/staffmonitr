@@ -26,10 +26,27 @@ type StaffAction =
   | { type: 'update'; id: string; updates: Partial<Pick<StaffMember, 'role' | 'status'>> }
   | { type: 'replace'; staff: StaffMember[] };
 
+const WEEK_DAY_ORDER = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const normalizeShift = (shift: ShiftTemplate): ShiftTemplate => ({
+  ...shift,
+  category: shift.category ?? 'coverage',
+  days: shift.days && shift.days.length ? shift.days : WEEK_DAY_ORDER,
+});
+
 const shiftReducer = (state: ShiftTemplate[], action: ShiftAction) => {
   switch (action.type) {
-    case 'add':
-      return [...state, action.shift].map((shift, index) => ({ ...shift, order: index }));
+    case 'add': {
+      const normalized = normalizeShift(action.shift);
+      if (normalized.category === 'coverage') {
+        const insertionIndex = state.findIndex((shift) => shift.category === 'role');
+        if (insertionIndex === -1) {
+          return [...state, normalized].map((shift, index) => ({ ...shift, order: index }));
+        }
+        const newState = [...state.slice(0, insertionIndex), normalized, ...state.slice(insertionIndex)];
+        return newState.map((shift, index) => ({ ...shift, order: index }));
+      }
+      return [...state, normalized].map((shift, index) => ({ ...shift, order: index }));
+    }
     case 'update':
       return state.map((shift) => (shift.id === action.id ? { ...shift, ...action.updates } : shift));
     case 'remove':
@@ -49,7 +66,7 @@ const shiftReducer = (state: ShiftTemplate[], action: ShiftAction) => {
       return cloned.map((shift, index) => ({ ...shift, order: index }));
     }
     case 'replace':
-      return action.shifts.map((shift, index) => ({ ...shift, order: index }));
+      return action.shifts.map((shift, index) => ({ ...normalizeShift(shift), order: index }));
     default:
       return state;
   }
@@ -92,7 +109,8 @@ export const ProjectionSettingsProvider = ({
   initialCoverageMode = DEFAULT_COVERAGE_MODE,
   initialStaff = [],
 }: ProjectionSettingsProviderProps) => {
-  const [shifts, dispatchShifts] = useReducer(shiftReducer, []);
+  const normalizedInitialShifts = useMemo(() => initialShifts.map(normalizeShift), [initialShifts]);
+  const [shifts, dispatchShifts] = useReducer(shiftReducer, normalizedInitialShifts);
   const [staff, dispatchStaff] = useReducer(staffReducer, []);
   const [coverageMode, setCoverageModeState] = useState(initialCoverageMode);
   const [isDirty, setIsDirty] = useState(false);
@@ -101,7 +119,7 @@ export const ProjectionSettingsProvider = ({
     shifts: ShiftTemplate[];
   }>({
     coverageMode: initialCoverageMode,
-    shifts: initialShifts,
+    shifts: normalizedInitialShifts,
   });
 
   const runShiftAction = useCallback((action: ShiftAction) => {
@@ -126,12 +144,13 @@ export const ProjectionSettingsProvider = ({
 
   const replaceShiftsFromServer = useCallback(
     ({ coverageMode: incomingCoverage, shifts: incomingShifts }: { coverageMode: CoverageMode; shifts: ShiftTemplate[] }) => {
+      const normalizedIncoming = incomingShifts.map(normalizeShift);
       startTransition(() => {
-        dispatchShifts({ type: 'replace', shifts: incomingShifts });
+        dispatchShifts({ type: 'replace', shifts: normalizedIncoming });
       });
       setCoverageModeState(incomingCoverage);
       setIsDirty(false);
-      lastSyncedRef.current = { coverageMode: incomingCoverage, shifts: incomingShifts };
+      lastSyncedRef.current = { coverageMode: incomingCoverage, shifts: normalizedIncoming };
     },
     [],
   );
@@ -151,20 +170,20 @@ export const ProjectionSettingsProvider = ({
     }
     const coverageMatches = lastSyncedRef.current.coverageMode === initialCoverageMode;
     const shiftsMatch =
-      lastSyncedRef.current.shifts.length === initialShifts.length &&
-      lastSyncedRef.current.shifts.every((shift, index) => shift.id === initialShifts[index]?.id);
+      lastSyncedRef.current.shifts.length === normalizedInitialShifts.length &&
+      lastSyncedRef.current.shifts.every((shift, index) => shift.id === normalizedInitialShifts[index]?.id);
     if (coverageMatches && shiftsMatch) {
       return;
     }
     startTransition(() => {
-      dispatchShifts({ type: 'replace', shifts: initialShifts });
+      dispatchShifts({ type: 'replace', shifts: normalizedInitialShifts });
     });
     setCoverageModeState(initialCoverageMode);
     lastSyncedRef.current = {
       coverageMode: initialCoverageMode,
-      shifts: initialShifts,
+      shifts: normalizedInitialShifts,
     };
-  }, [initialCoverageMode, initialShifts, isDirty]);
+  }, [initialCoverageMode, normalizedInitialShifts, isDirty]);
 
   useEffect(() => {
     startTransition(() => {
