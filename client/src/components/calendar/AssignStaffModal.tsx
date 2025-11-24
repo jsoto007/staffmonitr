@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useMemo, useState } from 'react';
 
 import type { StaffMember } from '../../types';
@@ -46,9 +47,9 @@ export const AssignStaffModal = ({
 
   const assignedCount = assignedStaffIds.length;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-black/60 p-4"
       role="dialog"
       aria-modal="true"
       aria-label={`Assign staff to ${site}`}
@@ -130,6 +131,7 @@ export const AssignStaffModal = ({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
