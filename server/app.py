@@ -1,8 +1,15 @@
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
-from .config import Config
-from .database import db, migrate
-from .routes import register_routes
+
+# Support running as a package (server.app) or as a module with --chdir server
+try:
+    from .config import Config
+    from .database import db, migrate
+    from .routes import register_routes
+except ImportError:  # pragma: no cover
+    from config import Config
+    from database import db, migrate
+    from routes import register_routes
 
 
 def create_app():
