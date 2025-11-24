@@ -15,16 +15,31 @@ from server.routes import register_routes
 
 
 def create_app():
-    app = Flask(__name__, static_folder='static', static_url_path='/static')
+    dist_dir = project_root / "client" / "dist"
+    static_folder = str(dist_dir) if dist_dir.exists() else None
+    # Serve built client from Vite dist if present
+    app = Flask(__name__, static_folder=static_folder, static_url_path="/")
     app.config.from_object(Config)
     db.init_app(app)
     migrate.init_app(app, db)
     CORS(app)
     register_routes(app)
 
-    @app.route('/')
+    @app.route("/")
     def root():
-        return jsonify({'status': 'staffmonitr API'}), 200
+        if static_folder:
+            return app.send_static_file("index.html")
+        return jsonify({"status": "staffmonitr API"}), 200
+
+    # React-router fallback to index.html
+    @app.route("/<path:path>")
+    def frontend(path):
+        if static_folder:
+            file_path = dist_dir / path
+            if file_path.exists():
+                return send_from_directory(dist_dir, path)
+            return app.send_static_file("index.html")
+        return jsonify({"error": "frontend not built"}), 404
 
     @app.route('/api/docs')
     def docs():
