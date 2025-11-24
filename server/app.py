@@ -1,15 +1,17 @@
+import sys
+from pathlib import Path
+
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 
-# Support running as a package (server.app) or as a module with --chdir server
-try:
-    from .config import Config
-    from .database import db, migrate
-    from .routes import register_routes
-except ImportError:  # pragma: no cover
-    from config import Config
-    from database import db, migrate
-    from routes import register_routes
+# Ensure parent directory is importable when Render runs `--chdir server`
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from server.config import Config
+from server.database import db, migrate
+from server.routes import register_routes
 
 
 def create_app():
