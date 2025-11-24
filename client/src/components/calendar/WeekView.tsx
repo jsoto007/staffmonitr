@@ -25,26 +25,30 @@ export const WeekView = ({ weekStart, shifts, isAdmin, onRequestCoverage }: Week
   );
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className="space-y-5">
       {weekDays.map((day, index) => (
-        <div key={day.toISOString()} className="space-y-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
-          <div className="text-xs uppercase tracking-[0.4em] text-slate-400">{formatDayLabel(day)}</div>
-          {shiftsByDay[index].length === 0 && (
+        <section key={day.toISOString()} className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/50 p-4 shadow-inner shadow-black/40">
+          <header className="flex items-center justify-between text-xs uppercase tracking-[0.4em] text-slate-400">
+            <span>{formatDayLabel(day)}</span>
+            <span>{day.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+          </header>
+          {shiftsByDay[index].length === 0 ? (
             <p className="text-sm text-slate-500">No shifts</p>
+          ) : (
+            <div className="space-y-4">
+              {shiftsByDay[index]
+                .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+                .map((shift) => (
+                  <ShiftCard
+                    key={shift.id}
+                    shift={shift}
+                    isAdmin={isAdmin}
+                    onRequestCoverage={onRequestCoverage}
+                  />
+                ))}
+            </div>
           )}
-          <div className="space-y-3">
-            {shiftsByDay[index]
-              .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-              .map((shift) => (
-                <ShiftCard
-                  key={shift.id}
-                  shift={shift}
-                  isAdmin={isAdmin}
-                  onRequestCoverage={onRequestCoverage}
-                />
-              ))}
-          </div>
-        </div>
+        </section>
       ))}
     </div>
   );

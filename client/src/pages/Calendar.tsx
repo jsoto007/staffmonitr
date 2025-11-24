@@ -5,6 +5,7 @@ import { useAccountContext } from '../context/AccountContext';
 import { useAuth } from '../context/AuthContext';
 import { useScheduleStore } from '../stores/scheduleStore';
 import { fetchShifts, requestShiftCoverage } from '../services/shifts';
+import { fetchAccountStaff } from '../services/staff';
 import { ViewSwitcher } from '../components/calendar/ViewSwitcher';
 import { DayView } from '../components/calendar/DayView';
 import { WeekView } from '../components/calendar/WeekView';
@@ -12,7 +13,7 @@ import { MonthView } from '../components/calendar/MonthView';
 import { StatusChip } from '../components/StatusChip';
 import { useEventStream } from '../hooks/useEventStream';
 import { ADMIN_ROLE_SET } from '../constants/roles';
-import type { ShiftEvent } from '../types';
+import type { ShiftEvent, StaffMember } from '../types';
 
 type ViewMode = 'day' | 'week' | 'month';
 
@@ -37,6 +38,7 @@ export const CalendarPage = () => {
   const { setShifts, setAssignments, setKids } = useScheduleStore();
   const queryClient = useQueryClient();
   const isAdmin = currentStaff ? ADMIN_ROLE_SET.has(currentStaff.role) : false;
+  const accountId = selectedAccount?.id ?? '';
 
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [focusDate, setFocusDate] = useState(() => new Date());
@@ -46,9 +48,10 @@ export const CalendarPage = () => {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const { data: shifts = [], isLoading } = useQuery(
-    ['shifts', selectedAccount.id],
-    () => fetchShifts(selectedAccount.id),
+    ['shifts', accountId],
+    () => fetchShifts(accountId),
     {
+      enabled: Boolean(accountId),
       refetchOnWindowFocus: false,
       onSuccess(data) {
         setShifts(data);
@@ -58,9 +61,13 @@ export const CalendarPage = () => {
     },
   );
 
+  const { data: staffList = [] } = useQuery(['accountStaff', accountId], () => fetchAccountStaff(accountId), {
+    enabled: Boolean(accountId),
+  });
+
   const handleStreamEvent = useCallback(
     ({ type }: { type: string }) => {
-      if (!selectedAccount?.id) {
+      if (!accountId) {
         return;
       }
       if (
@@ -72,10 +79,10 @@ export const CalendarPage = () => {
         type === 'open_shift_request_response' ||
         type === 'shift_request_broadcast'
       ) {
-        queryClient.invalidateQueries(['shifts', selectedAccount.id]);
+        queryClient.invalidateQueries(['shifts', accountId]);
       }
     },
-    [queryClient, selectedAccount?.id],
+    [queryClient, accountId],
   );
 
   useEventStream(handleStreamEvent);
@@ -96,8 +103,8 @@ export const CalendarPage = () => {
         setActiveShift(null);
         setMessage('');
         setConnectedIds('');
-        if (selectedAccount?.id) {
-          queryClient.invalidateQueries(['shifts', selectedAccount.id]);
+        if (accountId) {
+          queryClient.invalidateQueries(['shifts', accountId]);
         }
       },
       onError() {
@@ -175,9 +182,10 @@ export const CalendarPage = () => {
         shifts={shifts}
         isAdmin={isAdmin}
         onRequestCoverage={handleRequestCoverage}
+        staffMembers={staffList}
       />
     );
-  }, [dayShifts, focusDate, handleRequestCoverage, isAdmin, viewMode, weekStart, shifts]);
+  }, [dayShifts, focusDate, handleRequestCoverage, isAdmin, viewMode, staffList, weekStart, shifts]);
 
   return (
     <section className="space-y-8">

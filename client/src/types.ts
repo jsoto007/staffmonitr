@@ -34,6 +34,15 @@ export interface StaffMember {
   invite_expires_at?: string | null;
 }
 
+export interface ShiftWindow {
+  id: string;
+  account_group_id: string;
+  name: string;
+  start_minute: number;
+  end_minute: number;
+  order: number;
+}
+
 export interface ShiftEvent {
   id: string;
   account_group_id: string;
