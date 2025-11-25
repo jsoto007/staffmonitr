@@ -139,6 +139,7 @@ export const ShiftContainer = ({
               onRequestCoverage={onRequestCoverage}
               onAssignStaff={onAssignStaff}
               onRemoveAssignment={onRemoveAssignment}
+              accentColor={accentColor}
               {...(() => {
                 const { target, ratioLabel } = computeStaffNeeded(shift, template);
                 const assignedCount = shift.assignments?.length ?? 0;

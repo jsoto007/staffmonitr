@@ -14,6 +14,7 @@ interface ShiftBlockProps {
   assignedCountOverride?: number;
   statusDotColor?: 'red' | 'yellow' | 'green';
   displayLabel?: string;
+  accentColor?: string | null;
 }
 
 export const ShiftBlock = ({
@@ -28,7 +29,21 @@ export const ShiftBlock = ({
   assignedCountOverride,
   statusDotColor,
   displayLabel,
+  accentColor,
 }: ShiftBlockProps) => {
+  const applyAlphaToHex = (color: string, alpha: string) => {
+    if (!color.startsWith('#')) return color;
+    if (color.length === 4) {
+      const [_, r, g, b] = color;
+      return `#${r}${r}${g}${g}${b}${b}${alpha}`;
+    }
+    if (color.length === 7) {
+      return `${color}${alpha}`;
+    }
+    return color;
+  };
+
+  const fadedAccent = accentColor ? applyAlphaToHex(accentColor, '66') : undefined;
   const summarizeStatus = (assigned: number, target: number) => {
     const diff = assigned - target;
     if (diff < 0) return 'bg-rose-500';
@@ -54,7 +69,10 @@ export const ShiftBlock = ({
       : summarizeStatus(assignedCount, computedTarget);
 
   return (
-    <article className="rounded-2xl border border-white/5 bg-gradient-to-br from-slate-950/40 to-slate-900/60 p-4">
+    <article
+      className={`rounded-2xl border border-white/5 bg-gradient-to-br from-slate-950/40 to-slate-900/60 p-4 ${accentColor ? 'border-l-[3px]' : ''}`}
+      style={accentColor ? { borderLeftColor: fadedAccent } : undefined}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs uppercase tracking-[0.4em] text-slate-400">
         <div className="flex items-center gap-2">
           <span className={`h-2.5 w-2.5 rounded-full ${statusColorClass}`} aria-hidden />
