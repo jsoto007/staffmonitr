@@ -25,10 +25,10 @@ export const RosterPage = () => {
           <button className="rounded-2xl border border-slate-800 px-4 py-2 text-sm text-slate-200">Import CSV</button>
           <button className="rounded-2xl border border-slate-800 px-4 py-2 text-sm text-slate-200">Export filtered</button>
           <Link
-            to="/staff-settings"
+            to="/staff"
             className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:border-white/30"
           >
-            Staff Settings
+            Staff
           </Link>
         </div>
       </div>

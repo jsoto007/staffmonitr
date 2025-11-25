@@ -53,13 +53,14 @@ function App() {
         />
         <Route path="/kids" element={<Navigate to="/roster" replace />} />
         <Route
-          path="/staff-settings"
+          path="/staff"
           element={
             <Layout>
               <StaffSettingsPage />
             </Layout>
           }
         />
+        <Route path="/staff-settings" element={<Navigate to="/staff" replace />} />
         <Route
           path="/open-shifts"
           element={

@@ -67,7 +67,7 @@ const NAV_CATEGORIES: Category[] = [
     Icon: UserGroupIcon,
     items: [
       { id: 'roster', label: 'Roster', to: '/roster', Icon: ClipboardDocumentListIcon },
-      { id: 'staff-settings', label: 'Staff Settings', to: '/staff-settings', Icon: SparklesIcon },
+      { id: 'staff', label: 'Staff', to: '/staff', Icon: SparklesIcon },
       { id: 'notes', label: 'Notes', to: '/roster', Icon: MagnifyingGlassIcon },
     ],
   },

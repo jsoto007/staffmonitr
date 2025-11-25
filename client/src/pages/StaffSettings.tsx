@@ -22,6 +22,7 @@ export const StaffSettingsPage = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ full_name: string; email: string }>({ full_name: '', email: '' });
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const {
     data: staff = [],
@@ -32,6 +33,18 @@ export const StaffSettingsPage = () => {
   });
 
   const sortedStaff = useMemo(() => [...staff].sort((a, b) => a.full_name.localeCompare(b.full_name)), [staff]);
+  const filteredStaff = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) {
+      return sortedStaff;
+    }
+    return sortedStaff.filter((member) => {
+      const name = member.full_name.toLowerCase();
+      const email = (member.email || '').toLowerCase();
+      const role = (member.role || '').toLowerCase();
+      return name.includes(term) || email.includes(term) || role.includes(term);
+    });
+  }, [sortedStaff, searchTerm]);
 
   const invalidateStaff = () => {
     if (accountId) {
@@ -203,18 +216,30 @@ export const StaffSettingsPage = () => {
               <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Team</p>
               <h2 className="text-lg font-semibold text-white">Manage access</h2>
             </div>
-            {isFetching && <span className="text-xs text-slate-400">Refreshing…</span>}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="relative">
+                <span className="sr-only">Search staff</span>
+                <input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search name, email, or role"
+                  className="w-64 rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                />
+              </label>
+              {isFetching && <span className="text-xs text-slate-400">Refreshing…</span>}
+            </div>
           </div>
           {feedback && <p className="text-sm text-slate-300">{feedback}</p>}
 
           <div className="space-y-3">
             {isLoading && <p className="text-sm text-slate-400">Loading staff…</p>}
-            {!isLoading && sortedStaff.length === 0 && (
+            {!isLoading && filteredStaff.length === 0 && (
               <p className="rounded-2xl border border-dashed border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
-                No staff yet. Add your first teammate to enable scheduling and assignments.
+                No staff found. Adjust your search or add a teammate to enable scheduling and assignments.
               </p>
             )}
-            {sortedStaff.map((member) => {
+            {filteredStaff.map((member) => {
               const isEditing = editingId === member.id;
               const memberStatus = member.status ?? 'active';
               return (
