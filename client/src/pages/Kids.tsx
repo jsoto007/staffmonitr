@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useScheduleStore } from '../stores/scheduleStore';
 import type { KidDetails } from '../types';
 
-export const KidsPage = () => {
+export const RosterPage = () => {
   const { kids } = useScheduleStore();
 
   const grouped = useMemo<Record<string, KidDetails[]>>(() => {
@@ -17,12 +18,18 @@ export const KidsPage = () => {
     <section className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm uppercase tracking-[0.4em] text-slate-500">Assignments</p>
+          <p className="text-sm uppercase tracking-[0.4em] text-slate-500">Roster</p>
           <h1 className="text-3xl font-semibold text-white">Kids & assignment ratios</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button className="rounded-2xl border border-slate-800 px-4 py-2 text-sm text-slate-200">Import CSV</button>
           <button className="rounded-2xl border border-slate-800 px-4 py-2 text-sm text-slate-200">Export filtered</button>
+          <Link
+            to="/staff-settings"
+            className="rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:border-white/30"
+          >
+            Staff Settings
+          </Link>
         </div>
       </div>
 
@@ -63,3 +70,6 @@ export const KidsPage = () => {
     </section>
   );
 };
+
+// Backward compatibility export until all imports switch to RosterPage.
+export const KidsPage = RosterPage;

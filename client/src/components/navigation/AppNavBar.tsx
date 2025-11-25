@@ -60,15 +60,15 @@ const NAV_CATEGORIES: Category[] = [
     ],
   },
   {
-    id: 'kids',
-    to: '/kids',
-    label: 'Kids & Assignments',
+    id: 'roster',
+    to: '/roster',
+    label: 'Roster',
     accent: 'from-teal-400/60 via-emerald-400/60 to-cyan-400/60',
     Icon: UserGroupIcon,
     items: [
-      { id: 'roster', label: 'Kid roster', to: '/kids', Icon: ClipboardDocumentListIcon },
-      { id: 'pairing', label: 'Staff pairing', to: '/kids', Icon: SparklesIcon },
-      { id: 'notes', label: 'Notes', to: '/kids', Icon: MagnifyingGlassIcon },
+      { id: 'roster', label: 'Roster', to: '/roster', Icon: ClipboardDocumentListIcon },
+      { id: 'staff-settings', label: 'Staff Settings', to: '/staff-settings', Icon: SparklesIcon },
+      { id: 'notes', label: 'Notes', to: '/roster', Icon: MagnifyingGlassIcon },
     ],
   },
   {

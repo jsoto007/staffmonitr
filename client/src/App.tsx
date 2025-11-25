@@ -1,15 +1,16 @@
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { AccountProvider } from './context/AccountContext';
 import { Layout } from './components/Layout';
 import { CalendarPage } from './pages/Calendar';
 import { Dashboard } from './pages/Dashboard';
-import { KidsPage } from './pages/Kids';
+import { RosterPage } from './pages/Kids';
 import { LandingPage } from './pages/LandingPage';
 import { OpenShiftsPage } from './pages/OpenShifts';
 import { SignInPage } from './pages/SignIn';
 import { SignUpPage } from './pages/SignUp';
 import { AdminPanel } from './pages/AdminPanel';
 import { ProjectionSettingsPage } from './pages/ProjectionSettings';
+import { StaffSettingsPage } from './pages/StaffSettings';
 
 function App() {
   return (
@@ -43,10 +44,19 @@ function App() {
           }
         />
         <Route
-          path="/kids"
+          path="/roster"
           element={
             <Layout>
-              <KidsPage />
+              <RosterPage />
+            </Layout>
+          }
+        />
+        <Route path="/kids" element={<Navigate to="/roster" replace />} />
+        <Route
+          path="/staff-settings"
+          element={
+            <Layout>
+              <StaffSettingsPage />
             </Layout>
           }
         />
