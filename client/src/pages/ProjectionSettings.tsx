@@ -12,12 +12,11 @@ import {
   DEFAULT_RATIO_STAFF,
 } from '../context/ProjectionSettingsContext';
 import { fetchProjectionSettings, updateProjectionSettings } from '../services/projectionSettings';
-import { fetchAccountStaff, updateAccountStaff } from '../services/staff';
 import { ADMIN_ROLE_SET, ROLE_OPTIONS } from '../constants/roles';
 import { SHIFT_WINDOW_COLOR_SCHEMES } from '../constants/shiftWindows';
 import { StatusChip } from '../components/StatusChip';
 import { minutesToTimeInput, timeInputToMinutes } from '../utils/time';
-import type { CoverageMode, ShiftTemplate, StaffMember } from '../types';
+import type { CoverageMode, ShiftTemplate } from '../types';
 
 const DEFAULT_SEGMENT_DURATION = 480;
 
@@ -177,14 +176,6 @@ export const ProjectionSettingsPage = () => {
     },
   );
 
-  const {
-    data: staffList = [],
-    isFetching: staffLoading,
-  } = useQuery(['accountStaff', accountId], () => fetchAccountStaff(accountId as string), {
-    enabled: queriesEnabled,
-    refetchOnWindowFocus: false,
-  });
-
   if (!selectedAccount) {
     return (
       <section className="rounded-2xl border border-white/10 bg-slate-900/60 p-6 text-sm text-slate-400">
@@ -206,12 +197,10 @@ export const ProjectionSettingsPage = () => {
     <ProjectionSettingsProvider
       initialShifts={projectionSettings?.shifts ?? []}
       initialCoverageMode={projectionSettings?.coverage_mode ?? DEFAULT_COVERAGE_MODE}
-      initialStaff={staffList}
     >
       <ProjectionSettingsForm
         accountId={resolvedAccountId}
         settingsLoading={settingsLoading}
-        staffLoading={staffLoading}
         hasProjectionSettings={Boolean(projectionSettings)}
       />
     </ProjectionSettingsProvider>
@@ -221,17 +210,14 @@ export const ProjectionSettingsPage = () => {
 interface ProjectionSettingsFormProps {
   accountId: string;
   settingsLoading: boolean;
-  staffLoading: boolean;
   hasProjectionSettings: boolean;
 }
 
-const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasProjectionSettings }: ProjectionSettingsFormProps) => {
+const ProjectionSettingsForm = ({ accountId, settingsLoading, hasProjectionSettings }: ProjectionSettingsFormProps) => {
   const {
     shifts,
-    staff,
     coverageMode,
     runShiftAction,
-    runStaffAction,
     updateCoverageMode,
     replaceShiftsFromServer,
     rollbackShifts,
@@ -239,7 +225,6 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
   const queryClient = useQueryClient();
 
   const [scheduleFeedback, setScheduleFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [staffFeedback, setStaffFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [roleDraft, setRoleDraft] = useState({
     role: ROLE_OPTIONS[0],
     label: '',
@@ -283,21 +268,6 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
       onError() {
         setScheduleFeedback({ type: 'error', message: 'Unable to persist projection settings.' });
         rollbackShifts();
-      },
-    },
-  );
-
-  const staffMutation = useMutation(
-    ({ staffId, payload }: { staffId: string; payload: Partial<Pick<StaffMember, 'role' | 'status'>> }) =>
-      updateAccountStaff(accountId, staffId, payload),
-    {
-      onSuccess() {
-        setStaffFeedback({ type: 'success', message: 'Staff change queued.' });
-        queryClient.invalidateQueries(['accountStaff', accountId]);
-      },
-      onError() {
-        setStaffFeedback({ type: 'error', message: 'Unable to update staff.' });
-        queryClient.invalidateQueries(['accountStaff', accountId]);
       },
     },
   );
@@ -459,11 +429,6 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
     saveMutation.mutate(payload);
   };
 
-  const handleStaffUpdate = (staffId: string, updates: Partial<Pick<StaffMember, 'role' | 'status'>>) => {
-    runStaffAction({ type: 'update', id: staffId, updates });
-    staffMutation.mutate({ staffId, payload: updates });
-  };
-
   return (
     <section className="space-y-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
@@ -487,8 +452,8 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <article className="space-y-6 rounded-3xl border border-white/10 bg-slate-950/70 p-6">
+      <div className="space-y-6">
+        <article className="w-full space-y-6 rounded-3xl border border-white/10 bg-slate-950/70 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Shift timeline</p>
@@ -976,69 +941,6 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, staffLoading, hasP
           )}
         </article>
 
-        <article className="space-y-4 rounded-3xl border border-white/10 bg-slate-950/70 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Staff</p>
-              <h2 className="text-lg font-semibold text-white">Quick role & status edits</h2>
-            </div>
-            <StatusChip label={staff.length ? `${staff.length} people` : 'Roster empty'} color="#fcd34d" />
-          </div>
-          {staffLoading ? (
-            <p className="text-sm text-slate-500">Loading staff…</p>
-          ) : (
-            <div className="space-y-3">
-              {staff.map((member) => (
-                <div
-                  key={member.id}
-                  className="rounded-2xl border border-white/10 bg-slate-900/60 p-4"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-base font-semibold text-white">{member.full_name}</p>
-                      <p className="text-[11px] text-slate-400">{member.email}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex flex-col items-start text-[10px] uppercase tracking-[0.3em] text-slate-400">
-                        Role
-                        <select
-                          value={member.role}
-                          onChange={(event) => handleStaffUpdate(member.id, { role: event.target.value as StaffMember['role'] })}
-                          className="mt-1 rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
-                        >
-                          {ROLE_OPTIONS.map((option) => (
-                            <option key={option} value={option} className="bg-slate-900 text-white">
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="flex flex-col items-start text-[10px] uppercase tracking-[0.3em] text-slate-400">
-                        Status
-                        <select
-                          value={member.status}
-                          onChange={(event) => handleStaffUpdate(member.id, { status: event.target.value as StaffMember['status'] })}
-                          className="mt-1 rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
-                        >
-                          {['active', 'paused', 'inactive'].map((status) => (
-                            <option key={status} value={status} className="bg-slate-900 text-white">
-                              {status}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {staffFeedback && (
-            <p className={`text-sm ${staffFeedback.type === 'success' ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {staffFeedback.message}
-            </p>
-          )}
-        </article>
       </div>
     </section>
   );

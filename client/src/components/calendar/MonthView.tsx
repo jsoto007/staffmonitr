@@ -2,8 +2,10 @@ import { useMemo, useState } from 'react';
 import type { ShiftEvent, ShiftTemplate, StaffMember } from '../../types';
 
 import { CalendarDay } from './CalendarDay';
+import { computeStaffNeeded, shiftMatchesTemplate } from '../../utils/shiftTemplates';
 
 type DayStatus = 'red' | 'yellow' | 'green';
+type ShiftIndicator = { id: string; color: string; status: 'met' | 'partial' | 'missing'; target: number; assigned: number };
 
 const STATUS_CLASSES: Record<DayStatus, string> = {
   red: 'bg-rose-500',
@@ -11,6 +13,7 @@ const STATUS_CLASSES: Record<DayStatus, string> = {
   green: 'bg-emerald-400',
 };
 
+const DOT_FALLBACK_COLOR = '#94a3b8';
 const STATUS_LEGEND: { label: string; description: string; status: DayStatus }[] = [
   { label: 'Below target', description: 'More staffing needed to meet the ratio.', status: 'red' },
   { label: 'At target', description: 'Staffing exactly meets the target ratio.', status: 'yellow' },
@@ -35,12 +38,45 @@ const buildMonthGrid = (focus: Date) => {
   });
 };
 
-const summarizeDayStatus = (dayShifts: ShiftEvent[]): DayStatus => {
-  if (!dayShifts.length) {
+const summarizeDayStatus = (
+  dayShifts: ShiftEvent[],
+  shiftTemplates: ShiftTemplate[],
+  date: Date,
+  startOfToday: Date,
+): DayStatus => {
+  const considerTemplates = date >= startOfToday;
+  const matchedShiftIds = new Set<string>();
+  let totalTarget = 0;
+  let totalAssigned = 0;
+
+  if (considerTemplates && shiftTemplates.length > 0) {
+    const orderedTemplates = [...shiftTemplates].sort((a, b) => a.order - b.order);
+    orderedTemplates.forEach((template) => {
+      const matchingShifts = dayShifts.filter((shift) => shiftMatchesTemplate(shift, template));
+      if (matchingShifts.length === 0) {
+        totalTarget += template.ratio_staff && template.ratio_staff > 0 ? template.ratio_staff : 1;
+        return;
+      }
+      matchingShifts.forEach((shift) => {
+        matchedShiftIds.add(shift.id);
+        const { target } = computeStaffNeeded(shift, template);
+        totalTarget += target;
+        totalAssigned += shift.assignments?.length ?? 0;
+      });
+    });
+  }
+
+  dayShifts.forEach((shift) => {
+    if (matchedShiftIds.has(shift.id)) {
+      return;
+    }
+    totalTarget += shift.ratio_min ?? 1;
+    totalAssigned += shift.assignments?.length ?? 0;
+  });
+
+  if (totalTarget === 0) {
     return 'yellow';
   }
-  const totalTarget = dayShifts.reduce((sum, shift) => sum + (shift.ratio_min ?? 1), 0);
-  const totalAssigned = dayShifts.reduce((sum, shift) => sum + (shift.assignments?.length ?? 0), 0);
   const diff = totalAssigned - totalTarget;
   if (diff < 0) {
     return 'red';
@@ -85,6 +121,10 @@ export const MonthView = ({
 }: MonthViewProps) => {
   const [activeDate, setActiveDate] = useState<Date | null>(null);
   const gridDates = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
+  const orderedTemplates = useMemo(
+    () => [...shiftTemplates].sort((a, b) => a.order - b.order),
+    [shiftTemplates],
+  );
 
   const shiftsByDate = useMemo(() => {
     const map = new Map<string, ShiftEvent[]>();
@@ -99,11 +139,47 @@ export const MonthView = ({
 
   const dayStatusByDate = useMemo(() => {
     const statusMap = new Map<string, DayStatus>();
-    shiftsByDate.forEach((dayShifts, key) => {
-      statusMap.set(key, summarizeDayStatus(dayShifts));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    gridDates.forEach((date) => {
+      const key = date.toDateString();
+      const dayShifts = shiftsByDate.get(key) ?? [];
+      statusMap.set(key, summarizeDayStatus(dayShifts, shiftTemplates, date, today));
     });
     return statusMap;
-  }, [shiftsByDate]);
+  }, [gridDates, shiftTemplates, shiftsByDate]);
+
+  const shiftDotsByDate = useMemo(() => {
+    const map = new Map<string, ShiftIndicator[]>();
+    shiftsByDate.forEach((dayShifts, key) => {
+      const sortedShifts = [...dayShifts].sort(
+        (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
+      );
+      const dots = sortedShifts.map((shift) => {
+        const matchedTemplate = orderedTemplates.find((template) => shiftMatchesTemplate(shift, template));
+        const { target } = computeStaffNeeded(shift, matchedTemplate ?? null);
+        const assigned = shift.assignments?.length ?? 0;
+        let status: ShiftIndicator['status'] = 'missing';
+        let color = matchedTemplate?.color || DOT_FALLBACK_COLOR;
+        if (target > 0) {
+          if (assigned >= target) {
+            status = 'met';
+            color = '#22c55e';
+          } else if (assigned > 0) {
+            status = 'partial';
+            color = '#fbbf24';
+          } else {
+            status = 'missing';
+            color = '#f87171';
+          }
+        }
+        return { id: shift.id, color, status, target, assigned };
+      });
+      map.set(key, dots);
+    });
+    return map;
+  }, [orderedTemplates, shiftsByDate]);
 
   const staffById = useMemo(() => {
     const lookup: Record<string, StaffMember> = {};
@@ -134,6 +210,7 @@ export const MonthView = ({
         {gridDates.map((date) => {
           const dateKey = date.toDateString();
           const status = dayStatusByDate.get(dateKey) ?? 'yellow';
+          const shiftDots = shiftDotsByDate.get(dateKey) ?? [];
           const isCurrentMonth = date.getMonth() === monthDate.getMonth();
           return (
             <button
@@ -153,6 +230,28 @@ export const MonthView = ({
                 <span className="text-sm font-semibold leading-none text-white">{date.getDate()}</span>
                 <span className={`h-3 w-3 rounded-full border border-white/30 ${STATUS_CLASSES[status]}`} aria-hidden />
               </div>
+              {shiftDots.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {shiftDots.map((dot) => (
+                    <span
+                      key={dot.id}
+                      className="h-1.5 w-1.5 rounded-full ring-1 ring-white/10"
+                      style={{ backgroundColor: dot.color }}
+                      title={
+                        dot.target > 0
+                          ? `${dot.assigned}/${dot.target} assigned`
+                          : 'Shift'
+                      }
+                      aria-label={
+                        dot.target > 0
+                          ? `Shift ${dot.status === 'met' ? 'meets' : 'needs'} ratio ${dot.assigned}/${dot.target}`
+                          : 'Shift'
+                      }
+                    />
+                  ))}
+                  <span className="sr-only">{`${shiftDots.length} shifts`}</span>
+                </div>
+              )}
             </button>
           );
         })}

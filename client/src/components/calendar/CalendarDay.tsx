@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { ShiftContainer } from './ShiftContainer';
 import { ShiftBlock } from './ShiftBlock';
 import type { ShiftEvent, ShiftTemplate, StaffMember } from '../../types';
-import { minutesOfDay, timeInputToMinutes } from '../../utils/time';
+import { shiftMatchesTemplate } from '../../utils/shiftTemplates';
 
 interface CalendarDayProps {
   date: Date;
@@ -19,19 +19,6 @@ interface CalendarDayProps {
   showHeader?: boolean;
   className?: string;
 }
-
-const shiftMatchesTemplate = (shift: ShiftEvent, template: ShiftTemplate) => {
-  const shiftStart = minutesOfDay(new Date(shift.start_time));
-  const templateStart = timeInputToMinutes(template.start_time);
-  const templateEnd = timeInputToMinutes(template.end_time);
-  if (templateStart === templateEnd) {
-    return true;
-  }
-  if (templateStart < templateEnd) {
-    return shiftStart >= templateStart && shiftStart < templateEnd;
-  }
-  return shiftStart >= templateStart || shiftStart < templateEnd;
-};
 
 export const CalendarDay = ({
   className,
