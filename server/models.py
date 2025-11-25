@@ -119,8 +119,13 @@ class Shift(db.Model, TimestampMixin):
     open_shift = db.Column(db.Boolean, default=False)
 
     account_group = db.relationship('AccountGroup', backref=backref('shifts', lazy=True))
-    assignments = db.relationship('Assignment', back_populates='shift')
-    kids = db.relationship('Kid', back_populates='shift')
+    assignments = db.relationship(
+        'Assignment', back_populates='shift', cascade='all, delete-orphan'
+    )
+    kids = db.relationship('Kid', back_populates='shift', cascade='all, delete-orphan')
+    open_shift_requests = db.relationship(
+        'OpenShiftRequest', back_populates='shift', cascade='all, delete-orphan'
+    )
 
     @hybrid_property
     def duration_hours(self):
@@ -139,7 +144,7 @@ class Assignment(db.Model, TimestampMixin):
 
     shift = db.relationship('Shift', back_populates='assignments')
     staff = db.relationship('StaffMember', back_populates='assignments')
-    kids = db.relationship('Kid', back_populates='assignment')
+    kids = db.relationship('Kid', back_populates='assignment', cascade='all, delete-orphan')
 
 class Kid(db.Model, TimestampMixin):
     __tablename__ = 'kids'
@@ -180,4 +185,4 @@ class OpenShiftRequest(db.Model, TimestampMixin):
     requested_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     staff = db.relationship('StaffMember', back_populates='open_shift_requests')
-    shift = db.relationship('Shift')
+    shift = db.relationship('Shift', back_populates='open_shift_requests')
