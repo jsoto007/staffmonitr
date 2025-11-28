@@ -62,6 +62,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAuthToken(token);
   };
 
+  const parseAuthError = (err: unknown, fallback: string) => {
+    const axiosErr = err as AxiosError<{ error?: string }>;
+    if (axiosErr?.response?.data?.error) {
+      return axiosErr.response.data.error;
+    }
+    if (axiosErr?.request && !axiosErr.response) {
+      return 'Cannot reach the server. Check your connection and API URL.';
+    }
+    return fallback;
+  };
+
   const refresh = async () => {
     setLoading(true);
     try {
@@ -102,9 +113,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setAccounts(staffAccounts);
       return true;
     } catch (err) {
-      const message =
-        (err as AxiosError<{ error?: string }>)?.response?.data?.error || 'Unable to sign in.';
-      setError(message);
+      setError(parseAuthError(err, 'Unable to sign in.'));
       return false;
     }
   };
@@ -119,9 +128,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setAccounts(staffAccounts);
       return true;
     } catch (err) {
-      const message =
-        (err as AxiosError<{ error?: string }>)?.response?.data?.error || 'Unable to create workspace.';
-      setError(message);
+      setError(parseAuthError(err, 'Unable to create workspace.'));
       return false;
     }
   };

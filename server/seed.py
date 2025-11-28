@@ -3,7 +3,77 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from faker import Faker
+try:
+    from faker import Faker
+except ModuleNotFoundError:  # fallback for environments that don’t have Faker installed
+    class _FallbackFaker:
+        FIRST_NAMES = ['Alex', 'Jordan', 'Taylor', 'Morgan', 'Riley', 'Casey', 'Jamie']
+        LAST_NAMES = ['Reed', 'Parker', 'Morgan', 'Quinn', 'Hayes', 'Rivera', 'Cole']
+        JOBS = ['Program Coordinator', 'Support Coach', 'Team Lead', 'Driver', 'Support Specialist']
+        CITIES = ['Portland', 'Austin', 'Seattle', 'Denver', 'Raleigh', 'Atlanta', 'Phoenix']
+        COMPANIES = ['Pioneer', 'Summit', 'Northside', 'Harbor', 'Atlas', 'Riverbend']
+        COLORS = ['#0ea5e9', '#f97316', '#22c55e', '#facc15', '#e11d48', '#6366f1']
+        WORDS = ['care', 'support', 'shift', 'family', 'team', 'safety', 'growth', 'plan', 'kids', 'circle']
+
+        def __init__(self):
+            self._rng = random.Random()
+            self.unique = self._UniqueEmail(self)
+
+        def seed_instance(self, seed):
+            self._rng.seed(seed)
+            self.unique._seen.clear()
+
+        class _UniqueEmail:
+            def __init__(self, parent):
+                self.parent = parent
+                self._seen = set()
+
+            def email(self):
+                candidate = self.parent.email()
+                while candidate in self._seen:
+                    candidate = self.parent.email()
+                self._seen.add(candidate)
+                return candidate
+
+        def _pick(self, values):
+            return self._rng.choice(values)
+
+        def company(self):
+            return f"{self._pick(self.COMPANIES)} {self._pick(['Campus', 'Collective', 'Group', 'Center'])}"
+
+        def name(self):
+            return f"{self._pick(self.FIRST_NAMES)} {self._pick(self.LAST_NAMES)}"
+
+        def city(self):
+            return self._pick(self.CITIES)
+
+        def job(self):
+            return self._pick(self.JOBS)
+
+        def color(self):
+            return self._pick(self.COLORS)
+
+        def latitude(self):
+            return f"{self._rng.uniform(-90, 90):.6f}"
+
+        def longitude(self):
+            return f"{self._rng.uniform(-180, 180):.6f}"
+
+        def email(self):
+            name = self.name().lower().replace(' ', '.')
+            domain = self._pick(['example.com', 'demo.staffmonitr.dev'])
+            return f"{name}{self._rng.randint(1, 999)}@{domain}"
+
+        def paragraph(self, nb_sentences=2):
+            sentences = [self.sentence(nb_words=10) for _ in range(nb_sentences)]
+            return ' '.join(sentences)
+
+        def sentence(self, nb_words=8):
+            words = [self._pick(self.WORDS) for _ in range(nb_words)]
+            sentence = ' '.join(words)
+            return sentence.capitalize() + '.'
+
+    Faker = _FallbackFaker
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:

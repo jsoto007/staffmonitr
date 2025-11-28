@@ -17,32 +17,48 @@ depends_on = None
 
 
 def upgrade():
-    op.drop_table('shift_windows')
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
 
-    op.create_table(
-        'projection_settings',
-        sa.Column('account_group_id', sa.String(length=36), nullable=False),
-        sa.Column('coverage_mode', sa.String(length=32), nullable=False, server_default='partial_coverage'),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['account_group_id'], ['account_groups.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('account_group_id'),
-    )
+    if 'shift_windows' in inspector.get_table_names():
+        op.drop_table('shift_windows')
 
-    op.create_table(
-        'shift_templates',
-        sa.Column('id', sa.String(length=36), nullable=False),
-        sa.Column('account_group_id', sa.String(length=36), nullable=False),
-        sa.Column('label', sa.String(length=128), nullable=False),
-        sa.Column('start_minute', sa.Integer(), nullable=False),
-        sa.Column('end_minute', sa.Integer(), nullable=False),
-        sa.Column('color', sa.String(length=24), nullable=True),
-        sa.Column('sort_order', sa.Integer(), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(['account_group_id'], ['projection_settings.account_group_id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id'),
-    )
+    if 'projection_settings' not in inspector.get_table_names():
+        op.create_table(
+            'projection_settings',
+            sa.Column('account_group_id', sa.String(length=36), nullable=False),
+            sa.Column('coverage_mode', sa.String(length=32), nullable=False, server_default='partial_coverage'),
+            sa.Column(
+                'created_at',
+                sa.DateTime(timezone=True),
+                server_default=sa.text('(CURRENT_TIMESTAMP)'),
+                nullable=False,
+            ),
+            sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
+            sa.ForeignKeyConstraint(['account_group_id'], ['account_groups.id'], ondelete='CASCADE'),
+            sa.PrimaryKeyConstraint('account_group_id'),
+        )
+
+    if 'shift_templates' not in inspector.get_table_names():
+        op.create_table(
+            'shift_templates',
+            sa.Column('id', sa.String(length=36), nullable=False),
+            sa.Column('account_group_id', sa.String(length=36), nullable=False),
+            sa.Column('label', sa.String(length=128), nullable=False),
+            sa.Column('start_minute', sa.Integer(), nullable=False),
+            sa.Column('end_minute', sa.Integer(), nullable=False),
+            sa.Column('color', sa.String(length=24), nullable=True),
+            sa.Column('sort_order', sa.Integer(), nullable=False),
+            sa.Column(
+                'created_at',
+                sa.DateTime(timezone=True),
+                server_default=sa.text('(CURRENT_TIMESTAMP)'),
+                nullable=False,
+            ),
+            sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
+            sa.ForeignKeyConstraint(['account_group_id'], ['projection_settings.account_group_id'], ondelete='CASCADE'),
+            sa.PrimaryKeyConstraint('id'),
+        )
 
 
 def downgrade():

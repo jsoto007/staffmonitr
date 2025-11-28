@@ -3,6 +3,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
+from sqlalchemy import inspect
 
 # Ensure parent directory is importable when Render runs `--chdir server`
 project_root = Path(__file__).resolve().parent.parent
@@ -24,6 +25,12 @@ def create_app():
     migrate.init_app(app, db)
     CORS(app)
     register_routes(app)
+
+    # Bootstrap brand-new databases so auth/signup/login don't 500 on missing tables.
+    with app.app_context():
+        inspector = inspect(db.engine)
+        if not inspector.get_table_names():
+            db.create_all()
 
     @app.route("/")
     def root():

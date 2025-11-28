@@ -17,26 +17,40 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column(
-        'shift_templates',
-        sa.Column('category', sa.String(length=32), nullable=False, server_default='coverage'),
-    )
-    op.add_column(
-        'shift_templates',
-        sa.Column('role', sa.String(length=128), nullable=True),
-    )
-    op.add_column(
-        'shift_templates',
-        sa.Column(
-            'days',
-            sa.String(length=64),
-            nullable=False,
-            server_default='sun,mon,tue,wed,thu,fri,sat',
-        ),
-    )
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing_columns = {col['name'] for col in inspector.get_columns('shift_templates')}
+
+    if 'category' not in existing_columns:
+        op.add_column(
+            'shift_templates',
+            sa.Column('category', sa.String(length=32), nullable=False, server_default='coverage'),
+        )
+    if 'role' not in existing_columns:
+        op.add_column(
+            'shift_templates',
+            sa.Column('role', sa.String(length=128), nullable=True),
+        )
+    if 'days' not in existing_columns:
+        op.add_column(
+            'shift_templates',
+            sa.Column(
+                'days',
+                sa.String(length=64),
+                nullable=False,
+                server_default='sun,mon,tue,wed,thu,fri,sat',
+            ),
+        )
 
 
 def downgrade():
-    op.drop_column('shift_templates', 'days')
-    op.drop_column('shift_templates', 'role')
-    op.drop_column('shift_templates', 'category')
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    existing_columns = {col['name'] for col in inspector.get_columns('shift_templates')}
+
+    if 'days' in existing_columns:
+        op.drop_column('shift_templates', 'days')
+    if 'role' in existing_columns:
+        op.drop_column('shift_templates', 'role')
+    if 'category' in existing_columns:
+        op.drop_column('shift_templates', 'category')
