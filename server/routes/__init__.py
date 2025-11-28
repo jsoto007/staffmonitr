@@ -8,6 +8,7 @@ from .notifications import notifications_bp
 from .projection_settings import projection_settings_bp
 from .reports import reports_bp
 from .shifts import shifts_bp
+from .staff_matrix import staff_matrix_bp
 
 __all__ = ['register_routes']
 
@@ -24,5 +25,6 @@ def register_routes(app):
         reports_bp,
         notifications_bp,
         events_bp,
+        staff_matrix_bp,
     ]:
         app.register_blueprint(blueprint, url_prefix='/api')

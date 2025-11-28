@@ -10,6 +10,7 @@ import { SignInPage } from './pages/SignIn';
 import { SignUpPage } from './pages/SignUp';
 import { AdminPanel } from './pages/AdminPanel';
 import { ProjectionSettingsPage } from './pages/ProjectionSettings';
+import { StaffMatrixPage } from './pages/StaffMatrix';
 import { StaffSettingsPage } from './pages/StaffSettings';
 
 function App() {
@@ -32,6 +33,14 @@ function App() {
           element={
             <Layout>
               <CalendarPage />
+            </Layout>
+          }
+        />
+        <Route
+          path="/calendar/staff-matrix"
+          element={
+            <Layout>
+              <StaffMatrixPage />
             </Layout>
           }
         />

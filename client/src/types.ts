@@ -97,3 +97,59 @@ export interface KidDetails {
   shiftId?: string;
   accountGroupId?: string;
 }
+
+export interface StaffMatrixAssignment {
+  id: string;
+  template_id: string;
+  staff_id: string;
+  staff_name: string;
+  staff_role: Role;
+  start_date?: string | null;
+  end_date?: string | null;
+}
+
+export interface StaffMatrixOverride {
+  id: string;
+  staff_id: string;
+  staff_name: string;
+  date: string;
+  type: string;
+  reason?: string | null;
+}
+
+export interface StaffSupplementalShift {
+  id: string;
+  staff_id: string;
+  staff_name: string;
+  date: string;
+  label: string;
+  start_time: string;
+  end_time: string;
+  is_overtime: boolean;
+  notes?: string | null;
+}
+
+export type StaffMatrixDay = 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat';
+
+export interface WeeklyPatternEntry {
+  start_time: string;
+  end_time: string;
+}
+
+export type WeeklyPattern = Record<StaffMatrixDay, WeeklyPatternEntry[]>;
+
+export interface StaffMatrixTemplate {
+  id: string;
+  label: string;
+  role: string;
+  color?: string | null;
+  notes?: string | null;
+  weekly_pattern: WeeklyPattern;
+}
+
+export interface StaffMatrixPayload {
+  templates: StaffMatrixTemplate[];
+  assignments: StaffMatrixAssignment[];
+  overrides: StaffMatrixOverride[];
+  additional_shifts: StaffSupplementalShift[];
+}

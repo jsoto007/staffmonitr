@@ -7,15 +7,24 @@ from sqlalchemy.sql import func
 from .database import db
 from .roles import MANAGER_ROLE_VALUES, Role
 
+STAFF_MATRIX_DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+
+
+def _default_weekly_pattern():
+    return {day: [] for day in STAFF_MATRIX_DAY_KEYS}
+
+
 class TimestampMixin:
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now(), nullable=True)
+
 
 staff_account_association = db.Table(
     'staff_account_association',
     db.Column('staff_id', db.String(36), db.ForeignKey('staff_members.id', ondelete='CASCADE'), primary_key=True),
     db.Column('account_group_id', db.String(36), db.ForeignKey('account_groups.id', ondelete='CASCADE'), primary_key=True),
 )
+
 
 class AccountGroup(db.Model, TimestampMixin):
     __tablename__ = 'account_groups'
@@ -34,6 +43,11 @@ class AccountGroup(db.Model, TimestampMixin):
     projection_settings = db.relationship(
         'ProjectionSettings',
         uselist=False,
+        back_populates='account_group',
+        cascade='all, delete-orphan',
+    )
+    staff_matrix_templates = db.relationship(
+        'PermanentScheduleTemplate',
         back_populates='account_group',
         cascade='all, delete-orphan',
     )
@@ -80,6 +94,7 @@ class ShiftTemplate(db.Model, TimestampMixin):
 
     projection_settings = db.relationship('ProjectionSettings', back_populates='shift_templates')
 
+
 class PermissionMixin:
     @hybrid_property
     def can_manage(self):
@@ -88,6 +103,7 @@ class PermissionMixin:
     @hybrid_property
     def can_view_assignments(self):
         return self.role != Role.DRIVER.value
+
 
 class StaffMember(db.Model, TimestampMixin, PermissionMixin):
     __tablename__ = 'staff_members'
@@ -104,6 +120,22 @@ class StaffMember(db.Model, TimestampMixin, PermissionMixin):
     accounts = db.relationship('AccountGroup', secondary=staff_account_association, back_populates='staff')
     assignments = db.relationship('Assignment', back_populates='staff')
     open_shift_requests = db.relationship('OpenShiftRequest', back_populates='staff')
+    schedule_assignments = db.relationship(
+        'StaffScheduleAssignment',
+        back_populates='staff',
+        cascade='all, delete-orphan',
+    )
+    schedule_overrides = db.relationship(
+        'ScheduleOverride',
+        back_populates='staff',
+        cascade='all, delete-orphan',
+    )
+    supplemental_shifts = db.relationship(
+        'SupplementalShift',
+        back_populates='staff',
+        cascade='all, delete-orphan',
+    )
+
 
 class Shift(db.Model, TimestampMixin):
     __tablename__ = 'shifts'
@@ -132,6 +164,7 @@ class Shift(db.Model, TimestampMixin):
     def duration_hours(self):
         return (self.end_time - self.start_time).total_seconds() / 3600
 
+
 class Assignment(db.Model, TimestampMixin):
     __tablename__ = 'assignments'
 
@@ -146,6 +179,7 @@ class Assignment(db.Model, TimestampMixin):
     shift = db.relationship('Shift', back_populates='assignments')
     staff = db.relationship('StaffMember', back_populates='assignments')
     kids = db.relationship('Kid', back_populates='assignment', cascade='all, delete-orphan')
+
 
 class Kid(db.Model, TimestampMixin):
     __tablename__ = 'kids'
@@ -163,6 +197,7 @@ class Kid(db.Model, TimestampMixin):
     account_group = db.relationship('AccountGroup', backref=backref('kids', lazy=True))
     shift = db.relationship('Shift', back_populates='kids')
     assignment = db.relationship('Assignment', back_populates='kids')
+
 
 class Invitation(db.Model, TimestampMixin):
     __tablename__ = 'invitations'
@@ -187,6 +222,7 @@ class Invitation(db.Model, TimestampMixin):
 
     account_group = db.relationship('AccountGroup')
 
+
 class OpenShiftRequest(db.Model, TimestampMixin):
     __tablename__ = 'open_shift_requests'
 
@@ -198,3 +234,87 @@ class OpenShiftRequest(db.Model, TimestampMixin):
 
     staff = db.relationship('StaffMember', back_populates='open_shift_requests')
     shift = db.relationship('Shift', back_populates='open_shift_requests')
+
+
+class PermanentScheduleTemplate(db.Model, TimestampMixin):
+    __tablename__ = 'permanent_schedule_templates'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_group_id = db.Column(db.String(36), db.ForeignKey('account_groups.id', ondelete='CASCADE'), nullable=False)
+    label = db.Column(db.String(128), nullable=False)
+    role = db.Column(db.String(128), nullable=False)
+    color = db.Column(db.String(32))
+    notes = db.Column(db.Text)
+    weekly_pattern = db.Column(db.JSON, nullable=False, default=_default_weekly_pattern)
+
+    account_group = db.relationship('AccountGroup', back_populates='staff_matrix_templates')
+    assignments = db.relationship(
+        'StaffScheduleAssignment',
+        back_populates='template',
+        cascade='all, delete-orphan',
+    )
+
+
+class StaffScheduleAssignment(db.Model, TimestampMixin):
+    __tablename__ = 'staff_schedule_assignments'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_group_id = db.Column(
+        db.String(36),
+        db.ForeignKey('account_groups.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    template_id = db.Column(
+        db.String(36),
+        db.ForeignKey('permanent_schedule_templates.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    staff_id = db.Column(db.String(36), db.ForeignKey('staff_members.id'), nullable=False)
+    start_date = db.Column(db.Date, nullable=True)
+    end_date = db.Column(db.Date, nullable=True)
+
+    template = db.relationship('PermanentScheduleTemplate', back_populates='assignments')
+    staff = db.relationship('StaffMember', back_populates='schedule_assignments')
+
+
+class ScheduleOverride(db.Model, TimestampMixin):
+    __tablename__ = 'schedule_overrides'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_group_id = db.Column(
+        db.String(36),
+        db.ForeignKey('account_groups.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    staff_id = db.Column(db.String(36), db.ForeignKey('staff_members.id'), nullable=False)
+    template_id = db.Column(
+        db.String(36),
+        db.ForeignKey('permanent_schedule_templates.id'),
+        nullable=True,
+    )
+    date = db.Column(db.Date, nullable=False)
+    override_type = db.Column(db.String(32), nullable=False, default='day_off')
+    reason = db.Column(db.String(256))
+
+    staff = db.relationship('StaffMember', back_populates='schedule_overrides')
+    template = db.relationship('PermanentScheduleTemplate')
+
+
+class SupplementalShift(db.Model, TimestampMixin):
+    __tablename__ = 'supplemental_shifts'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_group_id = db.Column(
+        db.String(36),
+        db.ForeignKey('account_groups.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    staff_id = db.Column(db.String(36), db.ForeignKey('staff_members.id'), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+    label = db.Column(db.String(128), nullable=False)
+    start_minute = db.Column(db.Integer, nullable=False)
+    end_minute = db.Column(db.Integer, nullable=False)
+    is_overtime = db.Column(db.Boolean, default=False, nullable=False)
+    notes = db.Column(db.String(256))
+
+    staff = db.relationship('StaffMember', back_populates='supplemental_shifts')

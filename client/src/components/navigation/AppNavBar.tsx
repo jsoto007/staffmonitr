@@ -56,7 +56,7 @@ const NAV_CATEGORIES: Category[] = [
     items: [
       { id: 'publish', label: 'Projection', to: '/calendar/projection', Icon: SparklesIcon },
       { id: 'projection-settings', label: 'Projection Settings', to: '/calendar/projection-settings', Icon: ClipboardDocumentListIcon },
-      { id: 'coverage', label: 'Coverage QA', to: '/calendar/projection', Icon: ShieldCheckIcon },
+      { id: 'staff-matrix', label: 'Staff Matrix', to: '/calendar/staff-matrix', Icon: ShieldCheckIcon },
     ],
   },
   {
