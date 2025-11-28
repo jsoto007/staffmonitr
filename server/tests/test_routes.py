@@ -90,8 +90,7 @@ def test_auth_signup_login_and_me(tmp_path):
         assert signup_data['staff']['email'] == payload['email']
         assert signup_data['accounts']
 
-        token = signup_data['access_token']
-        me_resp = client.get('/api/auth/me', headers={'Authorization': f'Bearer {token}'})
+        me_resp = client.get('/api/auth/me')
         assert me_resp.status_code == 200
         me_data = me_resp.get_json()
         assert me_data['staff']['email'] == payload['email']
@@ -100,6 +99,10 @@ def test_auth_signup_login_and_me(tmp_path):
         assert login_resp.status_code == 200
         login_data = login_resp.get_json()
         assert login_data['staff']['email'] == payload['email']
+
+        me_after_login = client.get('/api/auth/me')
+        assert me_after_login.status_code == 200
+        assert me_after_login.get_json()['staff']['email'] == payload['email']
 
 
 def test_owner_admin_can_create_team_member(tmp_path):
@@ -123,7 +126,6 @@ def test_owner_admin_can_create_team_member(tmp_path):
         assert signup_resp.status_code == 201
         signup_data = signup_resp.get_json()
         account = signup_data['accounts'][0]
-        token = signup_data['access_token']
 
         new_staff = {
             'full_name': 'Backfill Staff',
@@ -132,11 +134,7 @@ def test_owner_admin_can_create_team_member(tmp_path):
             'role': 'Staff',
         }
 
-        create_resp = client.post(
-            f"/api/accounts/{account['id']}/staff",
-            json=new_staff,
-            headers={'Authorization': f"Bearer {token}"},
-        )
+        create_resp = client.post(f"/api/accounts/{account['id']}/staff", json=new_staff)
         assert create_resp.status_code == 201
         created = create_resp.get_json()
         assert created['email'] == new_staff['email']

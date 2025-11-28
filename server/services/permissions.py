@@ -1,27 +1,16 @@
-ROLES = [
-    'Owner_admin',
-    'Admin',
-    'Staff',
-    'Driver',
-    'Trainer',
-    'Assistant Lead',
-    'Lead',
-    'Residence Manager',
-    'Assistant Program Director',
-    'Director',
-]
+from ..roles import Role
 
 ROLE_PERMISSIONS = {
-    'Owner_admin': {'manage': True, 'schedule': True},
-    'Admin': {'manage': True, 'schedule': True},
-    'Director': {'manage': False, 'schedule': True},
-    'Lead': {'manage': False, 'schedule': True},
-    'Trainer': {'manage': False, 'schedule': True},
-    'Residence Manager': {'manage': False, 'schedule': True},
-    'Staff': {'manage': False, 'schedule': True},
-    'Driver': {'manage': False, 'schedule': False},
-    'Assistant Lead': {'manage': False, 'schedule': True},
-    'Assistant Program Director': {'manage': True, 'schedule': True},
+    Role.OWNER_ADMIN.value: {'manage': True, 'schedule': True},
+    Role.ADMIN.value: {'manage': True, 'schedule': True},
+    Role.DIRECTOR.value: {'manage': False, 'schedule': True},
+    Role.LEAD.value: {'manage': False, 'schedule': True},
+    Role.TRAINER.value: {'manage': False, 'schedule': True},
+    Role.RESIDENCE_MANAGER.value: {'manage': False, 'schedule': True},
+    Role.STAFF.value: {'manage': False, 'schedule': True},
+    Role.DRIVER.value: {'manage': False, 'schedule': False},
+    Role.ASSISTANT_LEAD.value: {'manage': False, 'schedule': True},
+    Role.ASSISTANT_PROGRAM_DIRECTOR.value: {'manage': True, 'schedule': True},
 }
 
 def has_permission(role: str, permission: str) -> bool:

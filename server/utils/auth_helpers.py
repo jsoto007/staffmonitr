@@ -3,13 +3,17 @@ from __future__ import annotations
 from functools import wraps
 from typing import Callable, Optional
 
-from flask import jsonify, request
+from flask import current_app, g, jsonify, request
 
 from ..models import StaffMember
 from ..services.auth import decode_access_token
 
 
-def _token_from_header() -> Optional[str]:
+def _token_from_request() -> Optional[str]:
+    cookie_name = current_app.config.get('JWT_COOKIE_NAME', 'staffmonitr_access_token')
+    token = request.cookies.get(cookie_name)
+    if token:
+        return token
     header = request.headers.get('Authorization', '')
     parts = header.split()
     if len(parts) == 2 and parts[0].lower() == 'bearer':
@@ -20,7 +24,7 @@ def _token_from_header() -> Optional[str]:
 def require_auth(func: Callable) -> Callable:
     @wraps(func)
     def decorated(*args, **kwargs):
-        token = _token_from_header()
+        token = _token_from_request()
         if not token:
             return jsonify({'error': 'Authorization token required'}), 401
 
@@ -35,6 +39,8 @@ def require_auth(func: Callable) -> Callable:
         staff = StaffMember.query.get(staff_id)
         if not staff:
             return jsonify({'error': 'Staff member not found'}), 404
+
+        g.current_staff = staff
 
         return func(*args, current_staff=staff, **kwargs)
 

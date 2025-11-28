@@ -5,11 +5,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 import bcrypt
+import hashlib
 import jwt
 from flask import current_app
 from jwt import PyJWTError
-
-from .permissions import ROLES
 
 
 def hash_password(password: str) -> str:
@@ -56,5 +55,6 @@ def oauth2_state() -> str:
     return secrets.token_urlsafe(16)
 
 
-def supported_roles() -> list[str]:
-    return ROLES
+def hash_invite_token(token: str) -> str:
+    """Return the SHA-256 digest of the invite token for safe storage."""
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()

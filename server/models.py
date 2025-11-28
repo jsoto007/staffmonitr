@@ -5,6 +5,7 @@ from sqlalchemy.orm import backref
 from sqlalchemy.sql import func
 
 from .database import db
+from .roles import MANAGER_ROLE_VALUES, Role
 
 class TimestampMixin:
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -82,11 +83,11 @@ class ShiftTemplate(db.Model, TimestampMixin):
 class PermissionMixin:
     @hybrid_property
     def can_manage(self):
-        return self.role in ['Owner_admin', 'Admin']
+        return self.role in MANAGER_ROLE_VALUES
 
     @hybrid_property
     def can_view_assignments(self):
-        return self.role not in ['Driver']
+        return self.role != Role.DRIVER.value
 
 class StaffMember(db.Model, TimestampMixin, PermissionMixin):
     __tablename__ = 'staff_members'
@@ -168,7 +169,18 @@ class Invitation(db.Model, TimestampMixin):
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     email = db.Column(db.String(160), nullable=False)
-    token = db.Column(db.String(64), unique=True, nullable=False, default=lambda: uuid.uuid4().hex)
+    token = db.Column(
+        db.String(64),
+        unique=True,
+        nullable=False,
+        doc='Deprecated: legacy plaintext token storage kept for existing invites.',
+    )
+    token_hash = db.Column(
+        db.String(64),
+        unique=True,
+        nullable=True,
+        doc='SHA-256 hash of the invite token. New invites should only use this field.',
+    )
     role = db.Column(db.String(64), nullable=False)
     expires_at = db.Column(db.DateTime)
     account_group_id = db.Column(db.String(36), db.ForeignKey('account_groups.id'))

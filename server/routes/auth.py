@@ -1,17 +1,14 @@
 from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, make_response, request
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from ..database import db
 from ..models import AccountGroup, StaffMember
-from ..services.auth import (
-    create_access_token,
-    decode_access_token,
-    hash_password,
-    supported_roles,
-    verify_password,
-)
+from ..schemas import LoginSchema, SignupSchema
+from ..services.auth import create_access_token, hash_password, verify_password
+from ..utils.auth_helpers import require_auth
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -45,21 +42,39 @@ def _staff_payload(staff: StaffMember) -> dict:
     }
 
 
-def _token_from_header() -> str | None:
-    header = request.headers.get('Authorization', '')
-    parts = header.split()
-    if len(parts) == 2 and parts[0].lower() == 'bearer':
-        return parts[1]
-    return None
+def _cookie_settings() -> dict:
+    """Central auth-cookie settings so logout and login stay in sync."""
+    return {
+        'httponly': True,
+        'secure': current_app.config.get('JWT_COOKIE_SECURE', False),
+        'samesite': current_app.config.get('JWT_COOKIE_SAMESITE', 'Lax'),
+        'path': current_app.config.get('JWT_COOKIE_PATH', '/'),
+    }
 
 
-def _respond_with_token(staff: StaffMember, status_code: int = 200):
+def _attach_auth_cookie(response, token: str):
+    cookie_settings = _cookie_settings()
+    cookie_settings['max_age'] = int(current_app.config['JWT_EXPIRY'].total_seconds())
+    response.set_cookie(current_app.config['JWT_COOKIE_NAME'], token, **cookie_settings)
+    # TODO: Add CSRF token validation on state-changing requests when cookies are the primary auth method.
+
+
+def _clear_auth_cookie(response):
+    cookie_settings = _cookie_settings()
+    response.set_cookie(
+        current_app.config['JWT_COOKIE_NAME'],
+        '',
+        expires=0,
+        max_age=0,
+        **cookie_settings,
+    )
+
+
+def _build_auth_response(staff: StaffMember, status_code: int = 200):
     token_data = create_access_token(staff.id, staff.role)
-    return (
+    response = make_response(
         jsonify(
             {
-                'access_token': token_data['token'],
-                'token_type': 'bearer',
                 'expires_at': token_data['expires_at'],
                 'staff': _staff_payload(staff),
                 'accounts': [_account_payload(account) for account in staff.accounts],
@@ -67,49 +82,48 @@ def _respond_with_token(staff: StaffMember, status_code: int = 200):
         ),
         status_code,
     )
+    _attach_auth_cookie(response, token_data['token'])
+    return response
 
 
 @auth_bp.route('/auth/signup', methods=['POST'])
 def signup():
-    payload = request.json or {}
-    full_name = payload.get('full_name')
-    email = payload.get('email')
-    password = payload.get('password')
-    if not (full_name and email and password):
-        return jsonify({'error': 'full_name, email, and password are required'}), 400
-    role = payload.get('role', 'Owner_admin')
-    if role not in supported_roles():
-        return jsonify({'error': 'Unsupported role'}), 400
-    if StaffMember.query.filter_by(email=email).first():
+    """Public endpoint for workspace owners to register a new account."""
+    try:
+        validated = SignupSchema.model_validate(request.json or {})
+    except ValidationError as exc:
+        return jsonify({'error': 'Invalid signup payload', 'details': exc.errors()}), 400
+
+    if StaffMember.query.filter_by(email=validated.email).first():
         return jsonify({'error': 'Email already registered'}), 409
 
-    friendly_name = full_name.strip()
+    friendly_name = validated.full_name.strip()
     lead_name = friendly_name.split()[0] if friendly_name else 'Workspace'
     account_name = (
-        payload.get('account_name')
-        or payload.get('company')
-        or payload.get('organization')
+        validated.account_name
+        or validated.company
+        or validated.organization
         or f"{lead_name}'s workspace"
     )
-    branding = payload.get('branding') or {}
-    geofence = payload.get('geofence') or {}
+    branding = validated.branding.dict() if validated.branding else {}
+    geofence = validated.geofence.dict() if validated.geofence else {}
 
     account = AccountGroup(
         name=account_name,
-        timezone=payload.get('timezone', 'UTC'),
+        timezone=validated.timezone,
         brand_primary=branding.get('primaryColor', '#1d4ed8'),
-        logo_url=branding.get('logoUrl') or payload.get('logo_url'),
+        logo_url=branding.get('logoUrl') or validated.logo_url,
         geofence_lat=float(geofence.get('lat', 0.0)),
         geofence_lon=float(geofence.get('lon', 0.0)),
         geofence_radius=int(geofence.get('radiusMeters', 900)),
     )
     staff = StaffMember(
-        full_name=full_name,
-        email=email,
-        role=role,
+        full_name=validated.full_name,
+        email=validated.email,
+        role=validated.role.value,
         status='active',
         invited_at=datetime.utcnow(),
-        password_hash=hash_password(password),
+        password_hash=hash_password(validated.password),
     )
     account.staff.append(staff)
 
@@ -120,39 +134,42 @@ def signup():
         db.session.rollback()
         return jsonify({'error': 'Unable to register account'}), 422
 
-    return _respond_with_token(staff, status_code=201)
+    return _build_auth_response(staff, status_code=201)
 
 
 @auth_bp.route('/auth/login', methods=['POST'])
 def login():
-    payload = request.json or {}
-    email = payload.get('email')
-    password = payload.get('password')
-    if not (email and password):
-        return jsonify({'error': 'Email and password are required'}), 400
-    staff = StaffMember.query.filter_by(email=email).first()
-    if not staff or not verify_password(password, staff.password_hash):
+    """Issue a session cookie for a verified staff member."""
+    try:
+        validated = LoginSchema.model_validate(request.json or {})
+    except ValidationError as exc:
+        return jsonify({'error': 'Invalid login payload', 'details': exc.errors()}), 400
+
+    staff = StaffMember.query.filter_by(email=validated.email).first()
+    if not staff or not verify_password(validated.password, staff.password_hash):
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    return _respond_with_token(staff)
+    return _build_auth_response(staff)
 
 
 @auth_bp.route('/auth/me', methods=['GET'])
-def me():
-    token = _token_from_header()
-    if not token:
-        return jsonify({'error': 'Authorization token required'}), 401
-    payload = decode_access_token(token)
-    if not payload:
-        return jsonify({'error': 'Invalid or expired token'}), 401
-    staff_id = payload.get('sub')
-    staff = StaffMember.query.get_or_404(staff_id)
+@require_auth
+def me(*, current_staff):
     return (
         jsonify(
             {
-                'staff': _staff_payload(staff),
-                'accounts': [_account_payload(account) for account in staff.accounts],
+                'staff': _staff_payload(current_staff),
+                'accounts': [_account_payload(account) for account in current_staff.accounts],
             }
         ),
         200,
     )
+
+
+@auth_bp.route('/auth/logout', methods=['POST'])
+@require_auth
+def logout(*, current_staff):
+    """Clear the auth cookie so the browser no longer sends a valid JWT."""
+    response = make_response(jsonify({'success': True}), 200)
+    _clear_auth_cookie(response)
+    return response

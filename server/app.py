@@ -23,7 +23,7 @@ def create_app():
     app.config.from_object(Config)
     db.init_app(app)
     migrate.init_app(app, db)
-    CORS(app)
+    CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": Config.FRONTEND_URL}})
     register_routes(app)
 
     # Bootstrap brand-new databases so auth/signup/login don't 500 on missing tables.

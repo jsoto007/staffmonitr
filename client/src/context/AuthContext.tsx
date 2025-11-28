@@ -1,9 +1,7 @@
 import { AxiosError } from 'axios';
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
-import api, { setAuthToken } from '../utils/api';
+import api from '../utils/api';
 import type { AccountGroup, StaffMember } from '../types';
-
-const TOKEN_STORAGE_KEY = 'staffmonitr_access_token';
 
 export interface SignupPayload {
   full_name: string;
@@ -53,15 +51,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const persistToken = (token: string | null) => {
-    if (token) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    } else {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
-    setAuthToken(token);
-  };
-
   const parseAuthError = (err: unknown, fallback: string) => {
     const axiosErr = err as AxiosError<{ error?: string }>;
     if (axiosErr?.response?.data?.error) {
@@ -76,20 +65,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const refresh = async () => {
     setLoading(true);
     try {
-      const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
-      if (!storedToken) {
-        persistToken(null);
-        setCurrentStaff(null);
-        setAccounts([]);
-        return;
-      }
-      persistToken(storedToken);
       const response = await api.get('/auth/me');
       setCurrentStaff(response.data.staff);
       setAccounts(response.data.accounts);
       setError(null);
     } catch (err) {
-      persistToken(null);
       setCurrentStaff(null);
       setAccounts([]);
       setError(null);
@@ -103,12 +83,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        const status = (error as AxiosError)?.response?.status;
+        if (status === 401 || status === 403) {
+          setCurrentStaff(null);
+          setAccounts([]);
+          setError(null);
+        }
+        return Promise.reject(error);
+      },
+    );
+    return () => api.interceptors.response.eject(interceptor);
+  }, []);
+
   const login = async (email: string, password: string) => {
     setError(null);
     try {
       const response = await api.post('/auth/login', { email, password });
-      const { access_token, staff, accounts: staffAccounts } = response.data;
-      persistToken(access_token);
+      const { staff, accounts: staffAccounts } = response.data;
       setCurrentStaff(staff);
       setAccounts(staffAccounts);
       return true;
@@ -122,8 +117,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setError(null);
     try {
       const response = await api.post('/auth/signup', payload);
-      const { access_token, staff, accounts: staffAccounts } = response.data;
-      persistToken(access_token);
+      const { staff, accounts: staffAccounts } = response.data;
       setCurrentStaff(staff);
       setAccounts(staffAccounts);
       return true;
@@ -134,7 +128,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
-    persistToken(null);
+    void api.post('/auth/logout').catch(() => {});
     setCurrentStaff(null);
     setAccounts([]);
     setError(null);
