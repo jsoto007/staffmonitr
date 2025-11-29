@@ -1,7 +1,9 @@
-from datetime import datetime
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy.orm import joinedload
 
 from ..database import db
 from ..models import (
@@ -19,6 +21,9 @@ staff_matrix_bp = Blueprint('staff_matrix', __name__)
 
 ALLOWED_OVERRIDE_TYPES = {'day_off', 'vacation', 'personal'}
 MINUTES_PER_DAY = 24 * 60
+VALID_SHIFT_TYPES = {'Morning', 'Evening', 'Night'}
+DEFAULT_CALENDAR_RANGE_DAYS = 28
+MAX_CALENDAR_RANGE_DAYS = 90
 
 
 def _format_minutes(minutes: int) -> str:
@@ -47,6 +52,48 @@ def _parse_date(value: Optional[str]) -> datetime.date:
     if not isinstance(value, str):
         raise ValueError('date must be an ISO YYYY-MM-DD string.')
     return datetime.strptime(value, '%Y-%m-%d').date()
+
+
+def _normalize_shift_type(value: Optional[str]) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip().title()
+    if normalized not in VALID_SHIFT_TYPES:
+        raise ValueError(f'shift_type must be one of {", ".join(sorted(VALID_SHIFT_TYPES))}.')
+    return normalized
+
+
+def _weekday_key_for_date(target_date: date) -> str:
+    return STAFF_MATRIX_DAY_KEYS[(target_date.weekday() + 1) % 7]
+
+
+def _iterate_date_range(start_date: date, end_date: date):
+    current = start_date
+    while current <= end_date:
+        yield current
+        current += timedelta(days=1)
+
+
+def _derive_shift_type(role: str | None, start_minute: int, end_minute: int) -> str | None:
+    if role != 'Youth Care Worker':
+        return None
+    if start_minute == 480 and end_minute == 960:
+        return 'Morning'
+    if start_minute == 960 and end_minute == 0:
+        return 'Evening'
+    if start_minute == 0 and end_minute == 480:
+        return 'Night'
+    return None
+
+
+def _gather_assignments(account_id: str):
+    query = StaffScheduleAssignment.query.options(joinedload(StaffScheduleAssignment.staff)).filter_by(
+        account_group_id=account_id
+    )
+    assignments: dict[str, list[StaffScheduleAssignment]] = defaultdict(list)
+    for assignment in query:
+        assignments[assignment.template_id].append(assignment)
+    return assignments
 
 
 def _normalize_weekly_pattern(payload: Optional[dict]) -> dict[str, list[dict[str, int]]]:
@@ -80,6 +127,86 @@ def _normalize_weekly_pattern(payload: Optional[dict]) -> dict[str, list[dict[st
     return normalized
 
 
+@staff_matrix_bp.route('/accounts/<account_id>/staff-matrix/calendar', methods=['GET'])
+@require_auth
+@require_role('Owner_admin', 'Admin')
+def get_staff_matrix_calendar(account_id: str, *, current_staff):
+    account = _authorize_account(account_id, current_staff)
+    if not account:
+        return jsonify({'error': 'Missing access to the requested account'}), 403
+
+    try:
+        start_date = _parse_date(request.args.get('start_date')) if request.args.get('start_date') else datetime.utcnow().date()
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    try:
+        end_date = _parse_date(request.args.get('end_date')) if request.args.get('end_date') else start_date + timedelta(days=DEFAULT_CALENDAR_RANGE_DAYS - 1)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    if end_date < start_date:
+        return jsonify({'error': 'end_date must be on or after start_date'}), 400
+    total_days = (end_date - start_date).days + 1
+    if total_days > MAX_CALENDAR_RANGE_DAYS:
+        return jsonify({'error': f'Date range cannot exceed {MAX_CALENDAR_RANGE_DAYS} days.'}), 400
+
+    templates = PermanentScheduleTemplate.query.filter_by(account_group_id=account_id).all()
+    assignment_map = _gather_assignments(account_id)
+    entries_by_date: dict[str, list[dict]] = defaultdict(list)
+
+    for current_date in _iterate_date_range(start_date, end_date):
+        day_key = _weekday_key_for_date(current_date)
+        for template in templates:
+            segments = (template.weekly_pattern or {}).get(day_key) or []
+            for index, segment in enumerate(segments):
+                start_minute = segment['start_minute']
+                end_minute = segment['end_minute']
+                entry_id = f'{template.id}-{current_date.isoformat()}-{index}'
+                assignment_for_day = next(
+                    (
+                        assignment
+                        for assignment in assignment_map.get(template.id, [])
+                        if (not assignment.start_date or assignment.start_date <= current_date)
+                        and (not assignment.end_date or assignment.end_date >= current_date)
+                    ),
+                    None,
+                )
+                staff_member = assignment_for_day.staff if assignment_for_day else None
+                entries_by_date[current_date.isoformat()].append(
+                    {
+                        'id': entry_id,
+                        'template_id': template.id,
+                        'template_label': template.label,
+                        'template_role': template.role,
+                        'template_color': template.color,
+                        'template_notes': template.notes,
+                        'date': current_date.isoformat(),
+                        'start_time': _format_minutes(start_minute),
+                        'end_time': _format_minutes(end_minute),
+                        'start_minute': start_minute,
+                        'end_minute': end_minute,
+                        'shift_type': template.shift_type or _derive_shift_type(template.role, start_minute, end_minute),
+                        'assignment_id': assignment_for_day.id if assignment_for_day else None,
+                        'staff_id': staff_member.id if staff_member else None,
+                        'staff_name': staff_member.full_name if staff_member else None,
+                        'staff_role': staff_member.role if staff_member else None,
+                        'is_open': not bool(staff_member),
+                    }
+                )
+
+    return jsonify(
+        {
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+            'entries': [
+                entry
+                for day in sorted(entries_by_date)
+                for entry in sorted(entries_by_date[day], key=lambda item: item['start_minute'])
+            ],
+        },
+    )
+
+
 def _serialize_weekly_pattern(pattern: Optional[dict]) -> dict[str, list[dict[str, str]]]:
     if not pattern:
         return {day: [] for day in STAFF_MATRIX_DAY_KEYS}
@@ -108,6 +235,7 @@ def _serialize_template(template: PermanentScheduleTemplate) -> dict:
         'color': template.color,
         'notes': template.notes,
         'weekly_pattern': _serialize_weekly_pattern(template.weekly_pattern),
+        'shift_type': template.shift_type,
     }
 
 
@@ -192,10 +320,21 @@ def create_template(account_id: str, *, current_staff):
     except ValueError as exc:
         return jsonify({'error': str(exc)}), 400
 
+    shift_type = None
+    raw_shift_type = payload.get('shift_type')
+    if raw_shift_type:
+        try:
+            normalized = _normalize_shift_type(raw_shift_type)
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+        if role == 'Youth Care Worker':
+            shift_type = normalized
+
     template = PermanentScheduleTemplate(
         account_group_id=account_id,
         label=label,
         role=role,
+        shift_type=shift_type,
         color=payload.get('color'),
         notes=payload.get('notes'),
         weekly_pattern=pattern,
@@ -223,6 +362,8 @@ def update_template(account_id: str, template_id: str, *, current_staff):
         template.label = label.strip() or template.label
     if role is not None and role.strip():
         template.role = role.strip()
+        if template.role != 'Youth Care Worker':
+            template.shift_type = None
 
     if 'weekly_pattern' in payload:
         try:
@@ -234,6 +375,13 @@ def update_template(account_id: str, template_id: str, *, current_staff):
         template.color = payload.get('color')
     if 'notes' in payload:
         template.notes = payload.get('notes')
+    if 'shift_type' in payload:
+        raw_shift_type = payload.get('shift_type')
+        try:
+            normalized = _normalize_shift_type(raw_shift_type)
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+        template.shift_type = normalized if template.role == 'Youth Care Worker' else None
 
     db.session.commit()
     return jsonify(_serialize_template(template))

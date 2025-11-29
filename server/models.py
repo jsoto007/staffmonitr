@@ -243,6 +243,7 @@ class PermanentScheduleTemplate(db.Model, TimestampMixin):
     account_group_id = db.Column(db.String(36), db.ForeignKey('account_groups.id', ondelete='CASCADE'), nullable=False)
     label = db.Column(db.String(128), nullable=False)
     role = db.Column(db.String(128), nullable=False)
+    shift_type = db.Column(db.String(32), nullable=True)
     color = db.Column(db.String(32))
     notes = db.Column(db.Text)
     weekly_pattern = db.Column(db.JSON, nullable=False, default=_default_weekly_pattern)

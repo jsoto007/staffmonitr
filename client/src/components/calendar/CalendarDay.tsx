@@ -1,65 +1,33 @@
 import clsx from 'clsx';
-import { useMemo } from 'react';
-
-import { ShiftContainer } from './ShiftContainer';
-import { ShiftBlock } from './ShiftBlock';
-import type { ShiftEvent, ShiftTemplate, StaffMember } from '../../types';
-import { shiftMatchesTemplate } from '../../utils/shiftTemplates';
+import type { StaffMatrixCalendarEntry } from '../../types';
 
 interface CalendarDayProps {
   date: Date;
-  shifts: ShiftEvent[];
-  shiftTemplates: ShiftTemplate[];
-  staffMembers: StaffMember[];
+  entries: StaffMatrixCalendarEntry[];
   isAdmin: boolean;
-  onRequestCoverage: (shift: ShiftEvent) => void;
-  onAssignStaff?: (shift: ShiftEvent) => void;
-  onAssignTemplate?: (template: ShiftTemplate, date: Date) => void;
-  onRemoveAssignment?: (assignmentId: string) => void;
+  onAssignEntry: (entry: StaffMatrixCalendarEntry) => void;
+  onRemoveAssignment?: (entry: StaffMatrixCalendarEntry) => void;
   showHeader?: boolean;
   className?: string;
 }
 
+const ENTRY_STATUS_LABEL = {
+  open: 'Open',
+  assigned: 'Filled',
+} as const;
+
+const formatEntryTime = (entry: StaffMatrixCalendarEntry) => `${entry.start_time} – ${entry.end_time}`;
+
 export const CalendarDay = ({
-  className,
   date,
-  shifts,
-  shiftTemplates,
-  staffMembers,
+  entries,
   isAdmin,
-  onRequestCoverage,
-  onAssignStaff,
-  onAssignTemplate,
+  onAssignEntry,
   onRemoveAssignment,
   showHeader = true,
+  className,
 }: CalendarDayProps) => {
-  const staffLookup = useMemo(() => {
-    const lookup: Record<string, StaffMember> = {};
-    staffMembers.forEach((staff) => {
-      lookup[staff.id] = staff;
-    });
-    return lookup;
-  }, [staffMembers]);
-
-  const grouped = useMemo(() => {
-    const orderedTemplates = [...shiftTemplates].sort((a, b) => a.order - b.order);
-    const templateMap = orderedTemplates.map((template) => ({ template, shifts: [] as ShiftEvent[] }));
-    const unassigned: ShiftEvent[] = [];
-    shifts.forEach((shift) => {
-      const matched = orderedTemplates.find((template) => shiftMatchesTemplate(shift, template));
-      if (matched) {
-        const entry = templateMap.find((group) => group.template.id === matched.id);
-        entry?.shifts.push(shift);
-      } else {
-        unassigned.push(shift);
-      }
-    });
-    return { templateGroups: templateMap, unassigned };
-  }, [shiftTemplates, shifts]);
-
-  const handleTemplateAssign = (template: ShiftTemplate) => {
-    onAssignTemplate?.(template, date);
-  };
+  const sortedEntries = [...entries].sort((a, b) => a.start_minute - b.start_minute);
 
   return (
     <section className={clsx('space-y-4 rounded-3xl border border-white/10 bg-slate-950/50 p-4 shadow-inner shadow-black/40', className)}>
@@ -67,71 +35,67 @@ export const CalendarDay = ({
         <header className="flex items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.4em] text-slate-400">{date.toLocaleDateString([], { weekday: 'short' })}</p>
-            <h2 className="text-lg font-semibold text-white">
-              {date.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
-            </h2>
+            <h2 className="text-lg font-semibold text-white">{date.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</h2>
           </div>
-          <span className="text-xs text-slate-400">{shifts.length} shift{shifts.length === 1 ? '' : 's'}</span>
+          <span className="text-xs text-slate-400">{sortedEntries.length} position{sortedEntries.length === 1 ? '' : 's'}</span>
         </header>
       )}
 
-      {shiftTemplates.length > 0 ? (
-        <div className="space-y-4">
-          {grouped.templateGroups.map(({ template, shifts: segmentShifts }) => (
-            <ShiftContainer
-              key={template.id}
-              template={template}
-              shifts={segmentShifts}
-              staffById={staffLookup}
-              isAdmin={isAdmin}
-              onRequestCoverage={onRequestCoverage}
-              onAssignStaff={onAssignStaff}
-              onAssignTemplate={handleTemplateAssign}
-              onRemoveAssignment={onRemoveAssignment}
-            />
-          ))}
-          {grouped.unassigned.length > 0 && (
-            <div className="rounded-3xl border border-dashed border-white/10 bg-slate-900/60 p-4">
-              <p className="text-sm font-semibold text-white">Unassigned shifts</p>
-              <p className="text-sm text-slate-400">These shifts do not match any defined segment.</p>
-              <div className="mt-3 space-y-3">
-                {grouped.unassigned
-                  .slice()
-                  .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-                  .map((shift) => (
-                    <ShiftBlock
-                      key={shift.id}
-                      shift={shift}
-                      staffById={staffLookup}
-                      isAdmin={isAdmin}
-                      onRequestCoverage={onRequestCoverage}
-                      onAssignStaff={onAssignStaff}
-                      onRemoveAssignment={onRemoveAssignment}
-                    />
-                  ))}
-              </div>
-            </div>
-          )}
-        </div>
-      ) : shifts.length === 0 ? (
-        <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-5 text-sm text-slate-400">
-          No shifts scheduled for this day.
-        </p>
+      {sortedEntries.length === 0 ? (
+        <p className="rounded-2xl border border-white/5 bg-white/5 px-4 py-5 text-sm text-slate-400">No positions scheduled for this day.</p>
       ) : (
         <div className="space-y-3">
-          {shifts
-            .slice()
-            .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
-            .map((shift) => (
-              <ShiftBlock
-                key={shift.id}
-                shift={shift}
-                staffById={staffLookup}
-                isAdmin={isAdmin}
-                onRequestCoverage={onRequestCoverage}
-                onAssignStaff={onAssignStaff}
-              />
-            ))}
+          {sortedEntries.map((entry) => (
+            <article key={entry.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.4em] text-slate-400">{entry.template_label}</p>
+                  <p className="text-lg font-semibold text-white">{formatEntryTime(entry)}</p>
+                  <p className="text-xs text-slate-500">
+                    {entry.shift_type ?? entry.template_role ?? 'Staff'}
+                    {entry.template_notes ? ` · ${entry.template_notes}` : ''}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={clsx(
+                      'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                      entry.is_open ? 'bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+                    )}
+                  >
+                    {entry.is_open ? 'Open' : 'Assigned'}
+                  </span>
+                  <p className="text-xs text-slate-400">{ENTRY_STATUS_LABEL[entry.is_open ? 'open' : 'assigned']}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-300">
+                  {entry.staff_name ?? 'Vacant'}
+                  {entry.staff_role ? ` · ${entry.staff_role}` : ''}
+                </p>
+                {isAdmin && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onAssignEntry(entry)}
+                      className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.4em] text-white transition hover:border-white/40"
+                    >
+                      Assign staff
+                    </button>
+                    {!entry.is_open && entry.assignment_id && onRemoveAssignment && (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveAssignment(entry)}
+                        className="rounded-2xl border border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.4em] text-slate-400 transition hover:border-rose-400 hover:text-white"
+                      >
+                        Unassign
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </article>
+          ))}
         </div>
       )}
     </section>

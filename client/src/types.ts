@@ -145,6 +145,7 @@ export interface StaffMatrixTemplate {
   color?: string | null;
   notes?: string | null;
   weekly_pattern: WeeklyPattern;
+  shift_type?: 'Morning' | 'Evening' | 'Night' | null;
 }
 
 export interface StaffMatrixPayload {
@@ -152,4 +153,30 @@ export interface StaffMatrixPayload {
   assignments: StaffMatrixAssignment[];
   overrides: StaffMatrixOverride[];
   additional_shifts: StaffSupplementalShift[];
+}
+
+export interface StaffMatrixCalendarEntry {
+  id: string;
+  template_id: string;
+  template_label: string;
+  template_role?: string | null;
+  template_color?: string | null;
+  template_notes?: string | null;
+  date: string;
+  start_time: string;
+  end_time: string;
+  start_minute: number;
+  end_minute: number;
+  shift_type?: 'Morning' | 'Evening' | 'Night' | null;
+  assignment_id?: string | null;
+  staff_id?: string | null;
+  staff_name?: string | null;
+  staff_role?: string | null;
+  is_open: boolean;
+}
+
+export interface StaffMatrixCalendarPayload {
+  start_date: string;
+  end_date: string;
+  entries: StaffMatrixCalendarEntry[];
 }

@@ -28,6 +28,8 @@ const WEEKDAY_LABELS: Record<StaffMatrixDay, string> = {
   sat: 'Sat',
 };
 const WEEKDAYS = Object.keys(WEEKDAY_LABELS) as StaffMatrixDay[];
+const SHIFT_TYPE_OPTIONS = ['Morning', 'Evening', 'Night'] as const;
+type ShiftTypeOption = (typeof SHIFT_TYPE_OPTIONS)[number];
 
 interface TemplateFormState {
   label: string;
@@ -36,6 +38,7 @@ interface TemplateFormState {
   notes: string;
   weeklyPattern: Record<StaffMatrixDay, WeeklyPatternEntry>;
   dayOff: Record<StaffMatrixDay, boolean>;
+  shiftType: ShiftTypeOption | '';
 }
 
 const createEmptyTemplateForm = (): TemplateFormState => ({
@@ -51,6 +54,7 @@ const createEmptyTemplateForm = (): TemplateFormState => ({
     acc[day] = false;
     return acc;
   }, {} as Record<StaffMatrixDay, boolean>),
+  shiftType: '',
 });
 
 const toPayloadPattern = (pattern: TemplateFormState['weeklyPattern'], dayOff: TemplateFormState['dayOff']) =>
@@ -68,7 +72,10 @@ const toPayloadPattern = (pattern: TemplateFormState['weeklyPattern'], dayOff: T
     return acc;
   }, {} as Record<StaffMatrixDay, WeeklyPatternEntry[]>);
 
-const patternToForm = (pattern: Record<StaffMatrixDay, WeeklyPatternEntry[]>) => {
+const patternToForm = (
+  pattern: Record<StaffMatrixDay, WeeklyPatternEntry[]>,
+  shiftType: ShiftTypeOption | '' = '',
+) => {
   const base = createEmptyTemplateForm();
   for (const day of WEEKDAYS) {
     const entry = pattern[day]?.[0];
@@ -80,6 +87,7 @@ const patternToForm = (pattern: Record<StaffMatrixDay, WeeklyPatternEntry[]>) =>
       base.weeklyPattern[day] = { start_time: '', end_time: '' };
     }
   }
+  base.shiftType = shiftType;
   return base;
 };
 
@@ -188,6 +196,7 @@ export const StaffMatrixPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedShiftId, setSelectedShiftId] = useState('');
 
   const { data: staffMatrix } = useQuery(
     ['staffMatrix', accountId],
@@ -238,24 +247,46 @@ export const StaffMatrixPage = () => {
     return (projectionSettings?.shifts ?? []).filter((shift) => shift.role === 'Youth Care Worker');
   }, [projectionSettings]);
 
+const normalizeShiftTypeLabel = (label?: string | null): ShiftTypeOption | '' => {
+  if (!label) {
+    return '';
+  }
+  const normalized = label.trim();
+  return SHIFT_TYPE_OPTIONS.includes(normalized as ShiftTypeOption) ? (normalized as ShiftTypeOption) : '';
+};
+
+const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string): TemplateFormState => {
+  const normalizedDays = (shift.days ?? []).map((day) => day.toLowerCase());
+  const shiftType = normalizeShiftTypeLabel(shift.label);
+  const daySet = new Set(normalizedDays.length ? normalizedDays : WEEKDAYS);
+
+  const weeklyPattern = WEEKDAYS.reduce<Record<StaffMatrixDay, WeeklyPatternEntry>>((acc, day) => {
+    const isOff = !daySet.has(day);
+    acc[day] = isOff ? { start_time: '', end_time: '' } : { start_time: shift.start_time, end_time: shift.end_time };
+    return acc;
+  }, createEmptyTemplateForm().weeklyPattern);
+
+  const dayOff = WEEKDAYS.reduce<Record<StaffMatrixDay, boolean>>((acc, day) => {
+    acc[day] = !daySet.has(day);
+    return acc;
+  }, createEmptyTemplateForm().dayOff);
+
+  return {
+    label: shift.label,
+    role: shift.role ?? defaultRole,
+    color: shift.color ?? '#6366f1',
+    notes: shift.notes ?? '',
+    weeklyPattern,
+    dayOff,
+    shiftType,
+  };
+};
+
   const usePreferenceTemplate = (shift: ProjectionShiftTemplate) => {
-    const normalizedDays = (shift.days ?? []).map((day) => day.toLowerCase());
-    const daySet = new Set(normalizedDays.length ? normalizedDays : WEEKDAYS);
-    const updatedForm = WEEKDAYS.reduce((acc, day) => {
-      const isOff = !daySet.has(day);
-      acc.weeklyPattern[day] = isOff ? { start_time: '', end_time: '' } : { start_time: shift.start_time, end_time: shift.end_time };
-      acc.dayOff[day] = isOff;
-      return acc;
-    }, createEmptyTemplateForm());
+    const updatedForm = createFormFromShift(shift, templateForm.role);
     setEditingTemplateId(null);
-    setTemplateForm({
-      label: shift.label,
-      role: shift.role ?? templateForm.role,
-      color: shift.color ?? '#6366f1',
-      notes: shift.notes ?? '',
-      weeklyPattern: updatedForm.weeklyPattern,
-      dayOff: updatedForm.dayOff,
-    });
+    setSelectedShiftId(shift.id);
+    setTemplateForm(updatedForm);
     setIsModalOpen(true);
   };
 
@@ -312,6 +343,17 @@ export const StaffMatrixPage = () => {
     setErrorMessage(null);
   }, [accountId]);
 
+  useEffect(() => {
+    if (templateForm.role !== 'Youth Care Worker') {
+      if (selectedShiftId) {
+        setSelectedShiftId('');
+      }
+      if (templateForm.shiftType) {
+        setTemplateForm((prev) => ({ ...prev, shiftType: '' }));
+      }
+    }
+  }, [selectedShiftId, templateForm.role, templateForm.shiftType]);
+
   const createTemplateMutation = useMutation(
     (payload: Record<string, unknown>) => createStaffMatrixTemplate(accountId, payload),
     {
@@ -320,6 +362,7 @@ export const StaffMatrixPage = () => {
         setTemplateForm(createEmptyTemplateForm());
         setEditingTemplateId(null);
         setIsModalOpen(false);
+        setSelectedShiftId('');
         queryClient.invalidateQueries(['staffMatrix', accountId]);
       },
       onError: (error) => {
@@ -337,6 +380,7 @@ export const StaffMatrixPage = () => {
         setTemplateForm(createEmptyTemplateForm());
         setEditingTemplateId(null);
         setIsModalOpen(false);
+        setSelectedShiftId('');
         queryClient.invalidateQueries(['staffMatrix', accountId]);
       },
       onError: (error) => {
@@ -360,6 +404,7 @@ export const StaffMatrixPage = () => {
       color: templateForm.color,
       notes: templateForm.notes,
       weekly_pattern: toPayloadPattern(templateForm.weeklyPattern, templateForm.dayOff),
+      shift_type: templateForm.role === 'Youth Care Worker' ? templateForm.shiftType || undefined : undefined,
     };
 
     if (editingTemplateId) {
@@ -372,6 +417,7 @@ export const StaffMatrixPage = () => {
   const openCreateModal = () => {
     setEditingTemplateId(null);
     setTemplateForm(createEmptyTemplateForm());
+    setSelectedShiftId('');
     setIsModalOpen(true);
   };
 
@@ -382,7 +428,7 @@ export const StaffMatrixPage = () => {
 
   const handleEditTemplate = (template: StaffMatrixTemplate) => {
     setEditingTemplateId(template.id);
-    const formState = patternToForm(template.weekly_pattern);
+    const formState = patternToForm(template.weekly_pattern, template.shift_type ?? '');
     setTemplateForm({
       label: template.label,
       role: template.role,
@@ -390,7 +436,9 @@ export const StaffMatrixPage = () => {
       notes: template.notes ?? '',
       weeklyPattern: formState.weeklyPattern,
       dayOff: formState.dayOff,
+      shiftType: formState.shiftType,
     });
+    setSelectedShiftId('');
     setIsModalOpen(true);
   };
 
@@ -512,7 +560,10 @@ export const StaffMatrixPage = () => {
                           </td>
                           <td className="whitespace-nowrap py-4 px-4">
                             <div className="text-sm font-semibold text-slate-900 dark:text-white">{row.template.label}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{row.template.role}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                              {row.template.role}
+                              {row.template.shift_type ? ` · ${row.template.shift_type}` : ''}
+                            </div>
                           </td>
                           <td className="py-4 px-4 text-xs text-slate-500 dark:text-slate-400">
                             {formatSchedulePattern(row.template.weekly_pattern)}
@@ -597,6 +648,59 @@ export const StaffMatrixPage = () => {
                     ))}
                   </select>
                 </label>
+                {templateForm.role === 'Youth Care Worker' && (
+                  <label className="space-y-1 text-sm">
+                    <span className="text-slate-500 dark:text-slate-400">Shift tag</span>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                      value={templateForm.shiftType}
+                      onChange={(event) => {
+                        const value = (event.target.value as ShiftTypeOption | '') || '';
+                        setTemplateForm((prev) => ({
+                          ...prev,
+                          shiftType: value,
+                        }));
+                      }}
+                    >
+                      <option value="">Select shift</option>
+                      {SHIFT_TYPE_OPTIONS.map((shiftType) => (
+                        <option key={shiftType} value={shiftType}>
+                          {shiftType}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Tag this Youth Care Worker schedule with one of the standard shifts.
+                    </p>
+                  </label>
+                )}
+                {templateForm.role === 'Youth Care Worker' && preferredShiftTemplates.length ? (
+                  <label className="space-y-1 text-sm">
+                    <span className="text-slate-500 dark:text-slate-400">Projection shift</span>
+                    <select
+                      className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                      value={selectedShiftId}
+                      onChange={(event) => {
+                        const shiftId = event.target.value;
+                        setSelectedShiftId(shiftId);
+                        const selectedShift = preferredShiftTemplates.find((shift) => shift.id === shiftId);
+                        if (selectedShift) {
+                          setTemplateForm(createFormFromShift(selectedShift, 'Youth Care Worker'));
+                        }
+                      }}
+                    >
+                      <option value="">Select shift</option>
+                      {preferredShiftTemplates.map((shift) => (
+                        <option key={shift.id} value={shift.id}>
+                          {shift.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Select a projection shift to auto-fill the weekly schedule for Youth Care Workers.
+                    </p>
+                  </label>
+                ) : null}
                 <label className="space-y-1 text-sm">
                   <span className="text-slate-500 dark:text-slate-400">Color</span>
                   <input

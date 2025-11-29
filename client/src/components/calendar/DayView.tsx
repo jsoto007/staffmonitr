@@ -1,38 +1,26 @@
-import type { ShiftEvent, ShiftTemplate, StaffMember } from '../../types';
+import type { StaffMatrixCalendarEntry } from '../../types';
 import { CalendarDay } from './CalendarDay';
 
 interface DayViewProps {
   date: Date;
-  shifts: ShiftEvent[];
-  shiftTemplates: ShiftTemplate[];
-  staffMembers: StaffMember[];
+  entries: StaffMatrixCalendarEntry[];
   isAdmin: boolean;
-  onRequestCoverage: (shift: ShiftEvent) => void;
-  onAssignStaff?: (shift: ShiftEvent) => void;
-  onAssignTemplate?: (template: ShiftTemplate, date: Date) => void;
-  onRemoveAssignment?: (assignmentId: string) => void;
+  onAssignEntry: (entry: StaffMatrixCalendarEntry) => void;
+  onRemoveAssignment?: (entry: StaffMatrixCalendarEntry) => void;
 }
 
 export const DayView = ({
   date,
-  shifts,
-  shiftTemplates,
-  staffMembers,
+  entries,
   isAdmin,
-  onRequestCoverage,
-  onAssignStaff,
-  onAssignTemplate,
+  onAssignEntry,
   onRemoveAssignment,
 }: DayViewProps) => (
-    <CalendarDay
-      date={date}
-      shifts={shifts}
-      shiftTemplates={shiftTemplates}
-      staffMembers={staffMembers}
-      isAdmin={isAdmin}
-      onRequestCoverage={onRequestCoverage}
-      onAssignStaff={onAssignStaff}
-      onAssignTemplate={onAssignTemplate}
-      onRemoveAssignment={onRemoveAssignment}
-    />
-  );
+  <CalendarDay
+    date={date}
+    entries={entries}
+    isAdmin={isAdmin}
+    onAssignEntry={onAssignEntry}
+    onRemoveAssignment={onRemoveAssignment}
+  />
+);

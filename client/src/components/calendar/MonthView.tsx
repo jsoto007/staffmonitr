@@ -1,11 +1,9 @@
 import { useMemo, useState } from 'react';
-import type { ShiftEvent, ShiftTemplate, StaffMember } from '../../types';
+import type { StaffMatrixCalendarEntry } from '../../types';
 
 import { CalendarDay } from './CalendarDay';
-import { computeStaffNeeded, shiftMatchesTemplate } from '../../utils/shiftTemplates';
 
 type DayStatus = 'red' | 'yellow' | 'green';
-type ShiftIndicator = { id: string; color: string; status: 'met' | 'partial' | 'missing'; target: number; assigned: number };
 
 const STATUS_CLASSES: Record<DayStatus, string> = {
   red: 'bg-rose-500',
@@ -13,11 +11,10 @@ const STATUS_CLASSES: Record<DayStatus, string> = {
   green: 'bg-emerald-400',
 };
 
-const DOT_FALLBACK_COLOR = '#94a3b8';
 const STATUS_LEGEND: { label: string; description: string; status: DayStatus }[] = [
-  { label: 'Below target', description: 'More staffing needed to meet the ratio.', status: 'red' },
-  { label: 'At target', description: 'Staffing exactly meets the target ratio.', status: 'yellow' },
-  { label: 'Above target', description: 'At least one extra staff member is scheduled.', status: 'green' },
+  { label: 'Below target', description: 'More staffing needed to meet the program position.', status: 'red' },
+  { label: 'At target', description: 'All scheduled positions are filled.', status: 'green' },
+  { label: 'No coverage', description: 'No positions scheduled for this day.', status: 'yellow' },
 ];
 
 const buildMonthGrid = (focus: Date) => {
@@ -38,166 +35,64 @@ const buildMonthGrid = (focus: Date) => {
   });
 };
 
-const summarizeDayStatus = (
-  dayShifts: ShiftEvent[],
-  shiftTemplates: ShiftTemplate[],
-  date: Date,
-  startOfToday: Date,
-): DayStatus => {
-  const considerTemplates = date >= startOfToday;
-  const matchedShiftIds = new Set<string>();
-  let totalTarget = 0;
-  let totalAssigned = 0;
-
-  if (considerTemplates && shiftTemplates.length > 0) {
-    const orderedTemplates = [...shiftTemplates].sort((a, b) => a.order - b.order);
-    orderedTemplates.forEach((template) => {
-      const matchingShifts = dayShifts.filter((shift) => shiftMatchesTemplate(shift, template));
-      if (matchingShifts.length === 0) {
-        totalTarget += template.ratio_staff && template.ratio_staff > 0 ? template.ratio_staff : 1;
-        return;
-      }
-      matchingShifts.forEach((shift) => {
-        matchedShiftIds.add(shift.id);
-        const { target } = computeStaffNeeded(shift, template);
-        totalTarget += target;
-        totalAssigned += shift.assignments?.length ?? 0;
-      });
-    });
-  }
-
-  dayShifts.forEach((shift) => {
-    if (matchedShiftIds.has(shift.id)) {
-      return;
-    }
-    totalTarget += shift.ratio_min ?? 1;
-    totalAssigned += shift.assignments?.length ?? 0;
-  });
-
-  if (totalTarget === 0) {
-    return 'yellow';
-  }
-  const diff = totalAssigned - totalTarget;
-  if (diff < 0) {
-    return 'red';
-  }
-  if (diff === 0) {
-    return 'yellow';
-  }
-  return 'green';
-};
-
-const formatShiftTime = (shift: ShiftEvent) => {
-  const start = new Date(shift.start_time);
-  const end = new Date(shift.end_time);
-  return `${start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} – ${end.toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-  })}`;
-};
+const dateKey = (date: Date) => date.toISOString().split('T')[0];
 
 interface MonthViewProps {
   monthDate: Date;
-  shifts: ShiftEvent[];
-  shiftTemplates: ShiftTemplate[];
-  staffMembers: StaffMember[];
+  entries: StaffMatrixCalendarEntry[];
+  entriesByDate: Map<string, StaffMatrixCalendarEntry[]>;
   isAdmin: boolean;
-  onRequestCoverage: (shift: ShiftEvent) => void;
-  onAssignStaff?: (shift: ShiftEvent) => void;
-  onAssignTemplate?: (template: ShiftTemplate, date: Date) => void;
-  onRemoveAssignment?: (assignmentId: string) => void;
+  onAssignEntry: (entry: StaffMatrixCalendarEntry) => void;
+  onRemoveAssignment?: (entry: StaffMatrixCalendarEntry) => void;
 }
 
 export const MonthView = ({
   monthDate,
-  shifts,
-  shiftTemplates,
-  staffMembers,
+  entriesByDate,
   isAdmin,
-  onRequestCoverage,
-  onAssignStaff,
-  onAssignTemplate,
+  onAssignEntry,
   onRemoveAssignment,
 }: MonthViewProps) => {
   const [activeDate, setActiveDate] = useState<Date | null>(null);
   const gridDates = useMemo(() => buildMonthGrid(monthDate), [monthDate]);
-  const orderedTemplates = useMemo(
-    () => [...shiftTemplates].sort((a, b) => a.order - b.order),
-    [shiftTemplates],
-  );
-
-  const shiftsByDate = useMemo(() => {
-    const map = new Map<string, ShiftEvent[]>();
-    shifts.forEach((shift) => {
-      const key = new Date(shift.start_time).toDateString();
-      const bucket = map.get(key) ?? [];
-      bucket.push(shift);
-      map.set(key, bucket);
-    });
-    return map;
-  }, [shifts]);
 
   const dayStatusByDate = useMemo(() => {
     const statusMap = new Map<string, DayStatus>();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     gridDates.forEach((date) => {
-      const key = date.toDateString();
-      const dayShifts = shiftsByDate.get(key) ?? [];
-      statusMap.set(key, summarizeDayStatus(dayShifts, shiftTemplates, date, today));
+      const key = dateKey(date);
+      const entries = entriesByDate.get(key) ?? [];
+      let status: DayStatus = 'yellow';
+      if (!entries.length) {
+        status = 'yellow';
+      } else if (entries.some((entry) => entry.is_open)) {
+        status = 'red';
+      } else {
+        status = 'green';
+      }
+      statusMap.set(key, status);
     });
     return statusMap;
-  }, [gridDates, shiftTemplates, shiftsByDate]);
+  }, [entriesByDate, gridDates]);
 
-  const shiftDotsByDate = useMemo(() => {
-    const map = new Map<string, ShiftIndicator[]>();
-    shiftsByDate.forEach((dayShifts, key) => {
-      const sortedShifts = [...dayShifts].sort(
-        (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
-      );
-      const dots = sortedShifts.map((shift) => {
-        const matchedTemplate = orderedTemplates.find((template) => shiftMatchesTemplate(shift, template));
-        const { target } = computeStaffNeeded(shift, matchedTemplate ?? null);
-        const assigned = shift.assignments?.length ?? 0;
-        let status: ShiftIndicator['status'] = 'missing';
-        let color = matchedTemplate?.color || DOT_FALLBACK_COLOR;
-        if (target > 0) {
-          if (assigned >= target) {
-            status = 'met';
-            color = '#22c55e';
-          } else if (assigned > 0) {
-            status = 'partial';
-            color = '#fbbf24';
-          } else {
-            status = 'missing';
-            color = '#f87171';
-          }
-        }
-        return { id: shift.id, color, status, target, assigned };
+  const dotsByDate = useMemo(() => {
+    const map = new Map<string, { id: string; color: string; status: 'filled' | 'open' }[]>();
+    entries.forEach((entry) => {
+      const key = entry.date;
+      const bucket = map.get(key) ?? [];
+      bucket.push({
+        id: entry.id,
+        color: entry.is_open ? '#f87171' : '#22c55e',
+        status: entry.is_open ? 'open' : 'filled',
       });
-      map.set(key, dots);
+      map.set(key, bucket);
     });
     return map;
-  }, [orderedTemplates, shiftsByDate]);
+  }, [entries]);
 
-  const staffById = useMemo(() => {
-    const lookup: Record<string, StaffMember> = {};
-    staffMembers.forEach((staff) => {
-      lookup[staff.id] = staff;
-    });
-    return lookup;
-  }, [staffMembers]);
-
-  const selectedDateKey = activeDate?.toDateString() ?? '';
-  const selectedShifts = selectedDateKey ? shiftsByDate.get(selectedDateKey) ?? [] : [];
-  const selectedStatus = selectedDateKey ? dayStatusByDate.get(selectedDateKey) ?? 'yellow' : 'yellow';
-
-  const handleDayClick = (date: Date) => {
-    setActiveDate(date);
-  };
-
-  const closeModal = () => setActiveDate(null);
+  const selectedEntries = activeDate ? entriesByDate.get(dateKey(activeDate)) ?? [] : [];
+  const selectedStatus = activeDate
+    ? dayStatusByDate.get(dateKey(activeDate)) ?? 'yellow'
+    : 'yellow';
 
   return (
     <>
@@ -208,48 +103,37 @@ export const MonthView = ({
           </div>
         ))}
         {gridDates.map((date) => {
-          const dateKey = date.toDateString();
-          const status = dayStatusByDate.get(dateKey) ?? 'yellow';
-          const shiftDots = shiftDotsByDate.get(dateKey) ?? [];
+          const key = dateKey(date);
+          const status = dayStatusByDate.get(key) ?? 'yellow';
+          const dots = dotsByDate.get(key) ?? [];
           const isCurrentMonth = date.getMonth() === monthDate.getMonth();
           return (
             <button
               key={date.toISOString()}
               type="button"
-              onClick={() => handleDayClick(date)}
+              onClick={() => setActiveDate(date)}
               className={`relative flex h-24 w-full flex-col justify-between rounded-2xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500 ${
                 isCurrentMonth
                   ? 'border-white/10 bg-slate-900/60'
                   : 'border-white/5 bg-slate-950/40 opacity-60'
               }`}
-              aria-label={`${date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} · ${
-                (shiftsByDate.get(dateKey) ?? []).length
-              } shifts`}
+              aria-label={`${date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })} · ${dots.length} positions`}
             >
               <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-sm font-semibold leading-none text-white">{date.getDate()}</span>
                 <span className={`h-3 w-3 rounded-full border border-white/30 ${STATUS_CLASSES[status]}`} aria-hidden />
               </div>
-              {shiftDots.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {shiftDots.map((dot) => (
+              {dots.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {dots.map((dot) => (
                     <span
                       key={dot.id}
                       className="h-1.5 w-1.5 rounded-full ring-1 ring-white/10"
                       style={{ backgroundColor: dot.color }}
-                      title={
-                        dot.target > 0
-                          ? `${dot.assigned}/${dot.target} assigned`
-                          : 'Shift'
-                      }
-                      aria-label={
-                        dot.target > 0
-                          ? `Shift ${dot.status === 'met' ? 'meets' : 'needs'} ratio ${dot.assigned}/${dot.target}`
-                          : 'Shift'
-                      }
+                      aria-label={dot.status === 'open' ? 'Open position' : 'Filled position'}
                     />
                   ))}
-                  <span className="sr-only">{`${shiftDots.length} shifts`}</span>
+                  <span className="sr-only">{dots.length} positions</span>
                 </div>
               )}
             </button>
@@ -262,8 +146,8 @@ export const MonthView = ({
           className="fixed inset-0 z-40 overflow-y-auto bg-black/60 px-4 py-10 sm:px-6"
           role="dialog"
           aria-modal="true"
-          aria-label={`Shifts for ${activeDate.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}`}
-          onClick={closeModal}
+          aria-label={`Positions for ${activeDate.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}`}
+          onClick={() => setActiveDate(null)}
         >
           <div
             className="mx-auto max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-slate-950/95 shadow-2xl shadow-black/60"
@@ -271,17 +155,17 @@ export const MonthView = ({
           >
             <div className="flex flex-col gap-2 border-b border-white/5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Daily projection</p>
+                <p className="text-xs uppercase tracking-[0.4em] text-slate-400">Staff matrix</p>
                 <h2 className="text-xl font-semibold text-white">
                   {activeDate.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}
                 </h2>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`h-3 w-3 rounded-full ${STATUS_CLASSES[selectedStatus]}`} />
+                <span className={`h-3 w-3 rounded-full ${STATUS_CLASSES[selectedStatus]}`} aria-hidden />
                 <p className="text-sm text-slate-300">{STATUS_LEGEND.find((item) => item.status === selectedStatus)?.label}</p>
                 <button
                   type="button"
-                  onClick={closeModal}
+                  onClick={() => setActiveDate(null)}
                   className="rounded-2xl border border-white/20 px-3 py-1 text-xs font-semibold uppercase tracking-[0.4em] text-slate-300 transition hover:border-white/50 hover:text-white sm:px-4 sm:py-2"
                 >
                   Close
@@ -292,13 +176,9 @@ export const MonthView = ({
             <div className="px-6 py-5">
               <CalendarDay
                 date={activeDate}
-                shifts={selectedShifts}
-                shiftTemplates={shiftTemplates}
-                staffMembers={staffMembers}
+                entries={selectedEntries}
                 isAdmin={isAdmin}
-                onRequestCoverage={onRequestCoverage}
-                onAssignStaff={onAssignStaff}
-                onAssignTemplate={onAssignTemplate}
+                onAssignEntry={onAssignEntry}
                 onRemoveAssignment={onRemoveAssignment}
                 showHeader={false}
               />
@@ -308,7 +188,10 @@ export const MonthView = ({
               <h3 className="text-sm font-semibold uppercase tracking-[0.4em] text-slate-400">Status legend</h3>
               <div className="grid gap-3 sm:grid-cols-3">
                 {STATUS_LEGEND.map((item) => (
-                  <div key={item.status} className="flex items-start gap-2 rounded-2xl border border-white/5 bg-slate-900/50 p-3">
+                  <div
+                    key={item.status}
+                    className="flex items-start gap-2 rounded-2xl border border-white/5 bg-slate-900/50 p-3"
+                  >
                     <span className={`mt-1 h-3 w-3 rounded-full ${STATUS_CLASSES[item.status]}`} />
                     <div>
                       <p className="text-sm font-semibold text-white">{item.label}</p>

@@ -1,4 +1,5 @@
 import api from '../utils/api';
+import type { StaffMatrixCalendarPayload } from '../types';
 
 const basePath = (accountId: string) => `/accounts/${accountId}/staff-matrix`;
 
@@ -37,3 +38,14 @@ export const addSupplementalShift = (accountId: string, payload: Record<string, 
 
 export const removeSupplementalShift = (accountId: string, shiftId: string) =>
   api.delete(`${basePath(accountId)}/additional-shifts/${shiftId}`);
+
+export const fetchStaffMatrixCalendar = (
+  accountId: string,
+  startDate: string,
+  endDate: string,
+) =>
+  api
+    .get<StaffMatrixCalendarPayload>(`/accounts/${accountId}/staff-matrix/calendar`, {
+      params: { start_date: startDate, end_date: endDate },
+    })
+    .then((response) => response.data);
