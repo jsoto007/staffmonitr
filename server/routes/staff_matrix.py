@@ -24,6 +24,8 @@ MINUTES_PER_DAY = 24 * 60
 VALID_SHIFT_TYPES = {'Morning', 'Evening', 'Night'}
 DEFAULT_CALENDAR_RANGE_DAYS = 28
 MAX_CALENDAR_RANGE_DAYS = 90
+YOUTH_CARE_WORKER_ROLE = 'Youth Care Worker'
+YOUTH_CARE_WORKER_ROLE_NORMALIZED = YOUTH_CARE_WORKER_ROLE.casefold()
 
 
 def _format_minutes(minutes: int) -> str:
@@ -63,6 +65,12 @@ def _normalize_shift_type(value: Optional[str]) -> str | None:
     return normalized
 
 
+def _is_youth_care_worker_role(role: str | None) -> bool:
+    if not isinstance(role, str):
+        return False
+    return role.strip().casefold() == YOUTH_CARE_WORKER_ROLE_NORMALIZED
+
+
 def _weekday_key_for_date(target_date: date) -> str:
     return STAFF_MATRIX_DAY_KEYS[(target_date.weekday() + 1) % 7]
 
@@ -75,7 +83,7 @@ def _iterate_date_range(start_date: date, end_date: date):
 
 
 def _derive_shift_type(role: str | None, start_minute: int, end_minute: int) -> str | None:
-    if role != 'Youth Care Worker':
+    if not _is_youth_care_worker_role(role):
         return None
     if start_minute == 480 and end_minute == 960:
         return 'Morning'
@@ -327,7 +335,7 @@ def create_template(account_id: str, *, current_staff):
             normalized = _normalize_shift_type(raw_shift_type)
         except ValueError as exc:
             return jsonify({'error': str(exc)}), 400
-        if role == 'Youth Care Worker':
+        if _is_youth_care_worker_role(role):
             shift_type = normalized
 
     template = PermanentScheduleTemplate(
@@ -362,7 +370,7 @@ def update_template(account_id: str, template_id: str, *, current_staff):
         template.label = label.strip() or template.label
     if role is not None and role.strip():
         template.role = role.strip()
-        if template.role != 'Youth Care Worker':
+        if not _is_youth_care_worker_role(template.role):
             template.shift_type = None
 
     if 'weekly_pattern' in payload:
@@ -381,7 +389,7 @@ def update_template(account_id: str, template_id: str, *, current_staff):
             normalized = _normalize_shift_type(raw_shift_type)
         except ValueError as exc:
             return jsonify({'error': str(exc)}), 400
-        template.shift_type = normalized if template.role == 'Youth Care Worker' else None
+        template.shift_type = normalized if _is_youth_care_worker_role(template.role) else None
 
     db.session.commit()
     return jsonify(_serialize_template(template))

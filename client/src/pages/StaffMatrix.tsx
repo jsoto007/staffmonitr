@@ -30,6 +30,10 @@ const WEEKDAY_LABELS: Record<StaffMatrixDay, string> = {
 const WEEKDAYS = Object.keys(WEEKDAY_LABELS) as StaffMatrixDay[];
 const SHIFT_TYPE_OPTIONS = ['Morning', 'Evening', 'Night'] as const;
 type ShiftTypeOption = (typeof SHIFT_TYPE_OPTIONS)[number];
+const YOUTH_CARE_WORKER_ROLE = 'Youth Care Worker';
+const YOUTH_CARE_WORKER_ROLE_NORMALIZED = YOUTH_CARE_WORKER_ROLE.toLowerCase();
+const isYouthCareWorkerRole = (role?: string | null) =>
+  (role ?? '').trim().toLowerCase() === YOUTH_CARE_WORKER_ROLE_NORMALIZED;
 
 interface TemplateFormState {
   label: string;
@@ -244,7 +248,7 @@ export const StaffMatrixPage = () => {
   }, [staffList, templates]);
 
   const preferredShiftTemplates = useMemo<ProjectionShiftTemplate[]>(() => {
-    return (projectionSettings?.shifts ?? []).filter((shift) => shift.role === 'Youth Care Worker');
+    return (projectionSettings?.shifts ?? []).filter((shift) => isYouthCareWorkerRole(shift.role));
   }, [projectionSettings]);
 
 const normalizeShiftTypeLabel = (label?: string | null): ShiftTypeOption | '' => {
@@ -344,7 +348,7 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
   }, [accountId]);
 
   useEffect(() => {
-    if (templateForm.role !== 'Youth Care Worker') {
+    if (!isYouthCareWorkerRole(templateForm.role)) {
       if (selectedShiftId) {
         setSelectedShiftId('');
       }
@@ -404,7 +408,7 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
       color: templateForm.color,
       notes: templateForm.notes,
       weekly_pattern: toPayloadPattern(templateForm.weeklyPattern, templateForm.dayOff),
-      shift_type: templateForm.role === 'Youth Care Worker' ? templateForm.shiftType || undefined : undefined,
+      shift_type: isYouthCareWorkerRole(templateForm.role) ? templateForm.shiftType || undefined : undefined,
     };
 
     if (editingTemplateId) {
@@ -528,73 +532,103 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
 
         {templates.length ? (
           <div className="space-y-6">
-            {scheduleRoleGroups.map(([role, rows]) => (
-              <div key={role} className="flow-root rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm shadow-black/5 dark:border-white/10 dark:bg-slate-900/70">
-                <div className="flex items-center justify-between border-b border-slate-100/70 px-5 py-3 dark:border-white/5">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{role}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {rows.length} schedule{rows.length === 1 ? '' : 's'}
-                    </p>
+            {scheduleRoleGroups.map(([role, rows]) => {
+              const rowsByShift = rows.reduce<Record<string, ScheduleRow[]>>((acc, row) => {
+                const shiftLabel = row.template.shift_type || 'Unspecified shift';
+                acc[shiftLabel] = acc[shiftLabel] ?? [];
+                acc[shiftLabel].push(row);
+                return acc;
+              }, {});
+              const shiftGroups = Object.entries(rowsByShift).sort(([shiftA], [shiftB]) => shiftA.localeCompare(shiftB));
+
+              return (
+                <div key={role} className="flow-root rounded-2xl border border-slate-200/70 bg-white/80 shadow-sm shadow-black/5 dark:border-white/10 dark:bg-slate-900/70">
+                  <div className="flex items-center justify-between border-b border-slate-100/70 px-5 py-3 dark:border-white/5">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{role}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {rows.length} schedule{rows.length === 1 ? '' : 's'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="space-y-3 p-4">
+                    {shiftGroups.map(([shiftLabel, shiftRows]) => {
+                      const assignedCount = shiftRows.filter((row) => row.status === 'Assigned').length;
+                      const vacantCount = shiftRows.filter((row) => row.status === 'Vacant').length;
+
+                      return (
+                        <div key={shiftLabel} className="overflow-x-auto rounded-2xl border border-slate-100/70 dark:border-white/5">
+                          <div className="flex items-center justify-between border-b border-slate-100/60 bg-slate-50/80 px-4 py-3 text-xs uppercase tracking-wide text-slate-500 dark:border-white/5 dark:bg-white/5 dark:text-slate-400">
+                            <div className="font-semibold text-slate-700 dark:text-slate-200">{shiftLabel}</div>
+                            <div className="flex items-center gap-3 text-[11px] font-semibold">
+                              <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                                {assignedCount} staff
+                              </span>
+                              <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                                {vacantCount} vacanc{vacantCount === 1 ? 'y' : 'ies'}
+                              </span>
+                            </div>
+                          </div>
+                          <table className="min-w-full divide-y divide-slate-200 text-sm text-slate-700 dark:divide-white/5 dark:text-slate-200">
+                            <thead className="bg-white/70 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
+                              <tr>
+                                <th className="py-3.5 px-4 text-left">Name</th>
+                                <th className="py-3.5 px-4 text-left">Title</th>
+                                <th className="py-3.5 px-4 text-left">Schedule</th>
+                                <th className="py-3.5 px-4 text-left">Status</th>
+                                <th className="py-3.5 px-4 text-left">Edit</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white dark:bg-slate-900/40">
+                              {shiftRows.map((row) => (
+                                <tr key={row.id}>
+                                  <td className="whitespace-nowrap py-4 px-4">
+                                    <div className="text-sm font-semibold text-slate-900 dark:text-white">{row.staffName}</div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                      {row.status === 'Assigned' ? row.staffRole ?? row.template.role : 'Vacant'}
+                                    </div>
+                                  </td>
+                                  <td className="whitespace-nowrap py-4 px-4">
+                                    <div className="text-sm font-semibold text-slate-900 dark:text-white">{row.template.label}</div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                      {row.template.role}
+                                      {row.template.shift_type ? ` · ${row.template.shift_type}` : ''}
+                                    </div>
+                                  </td>
+                                  <td className="py-4 px-4 text-xs text-slate-500 dark:text-slate-400">
+                                    {formatSchedulePattern(row.template.weekly_pattern)}
+                                  </td>
+                                  <td className="py-4 px-4">
+                                    <span
+                                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                                        row.status === 'Assigned'
+                                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                          : 'bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
+                                      }`}
+                                    >
+                                      {row.status === 'Assigned' ? 'Assigned' : 'Vacant'}
+                                    </span>
+                                  </td>
+                                  <td className="py-4 px-4 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditTemplate(row.template)}
+                                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-900"
+                                    >
+                                      Edit<span className="sr-only">, {row.template.label} schedule</span>
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm text-slate-700 dark:divide-white/5 dark:text-slate-200">
-                    <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500 dark:bg-white/5 dark:text-slate-400">
-                      <tr>
-                        <th className="py-3.5 px-4 text-left">Name</th>
-                        <th className="py-3.5 px-4 text-left">Title</th>
-                        <th className="py-3.5 px-4 text-left">Schedule</th>
-                        <th className="py-3.5 px-4 text-left">Status</th>
-                        <th className="py-3.5 px-4 text-left">Edit</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white dark:bg-slate-900/40">
-                      {rows.map((row) => (
-                        <tr key={row.id}>
-                          <td className="whitespace-nowrap py-4 px-4">
-                            <div className="text-sm font-semibold text-slate-900 dark:text-white">{row.staffName}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              {row.status === 'Assigned' ? row.staffRole ?? row.template.role : 'Vacant'}
-                            </div>
-                          </td>
-                          <td className="whitespace-nowrap py-4 px-4">
-                            <div className="text-sm font-semibold text-slate-900 dark:text-white">{row.template.label}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">
-                              {row.template.role}
-                              {row.template.shift_type ? ` · ${row.template.shift_type}` : ''}
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-xs text-slate-500 dark:text-slate-400">
-                            {formatSchedulePattern(row.template.weekly_pattern)}
-                          </td>
-                          <td className="py-4 px-4">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                row.status === 'Assigned'
-                                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                                  : 'bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
-                              }`}
-                            >
-                              {row.status === 'Assigned' ? 'Assigned' : 'Vacant'}
-                            </span>
-                          </td>
-                          <td className="py-4 px-4 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleEditTemplate(row.template)}
-                              className="text-xs font-semibold text-indigo-600 hover:text-indigo-900"
-                            >
-                              Edit<span className="sr-only">, {row.template.label} schedule</span>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm text-slate-500 dark:text-slate-400">No permanent schedules defined yet.</p>
@@ -648,7 +682,7 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
                     ))}
                   </select>
                 </label>
-                {templateForm.role === 'Youth Care Worker' && (
+                {isYouthCareWorkerRole(templateForm.role) && (
                   <label className="space-y-1 text-sm">
                     <span className="text-slate-500 dark:text-slate-400">Shift tag</span>
                     <select
@@ -674,7 +708,7 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
                     </p>
                   </label>
                 )}
-                {templateForm.role === 'Youth Care Worker' && preferredShiftTemplates.length ? (
+                {isYouthCareWorkerRole(templateForm.role) && preferredShiftTemplates.length ? (
                   <label className="space-y-1 text-sm">
                     <span className="text-slate-500 dark:text-slate-400">Projection shift</span>
                     <select
@@ -685,7 +719,7 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
                         setSelectedShiftId(shiftId);
                         const selectedShift = preferredShiftTemplates.find((shift) => shift.id === shiftId);
                         if (selectedShift) {
-                          setTemplateForm(createFormFromShift(selectedShift, 'Youth Care Worker'));
+                          setTemplateForm(createFormFromShift(selectedShift, YOUTH_CARE_WORKER_ROLE));
                         }
                       }}
                     >
