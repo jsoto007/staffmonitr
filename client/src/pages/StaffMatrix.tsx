@@ -826,40 +826,59 @@ export const StaffMatrixPage = () => {
       </section>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-4 py-6">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-            <div className="mb-4 flex items-center justify-between">
+          <form
+            onSubmit={handleTemplateSubmit}
+            className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white px-6 py-7 shadow-2xl ring-1 ring-slate-900/5 md:px-9 md:py-8 dark:bg-slate-900"
+          >
+            <header className="flex flex-col gap-3 pb-2 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Program schedule</p>
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Program schedule</p>
+                <h3 className="text-2xl font-semibold text-slate-900 dark:text-white">
                   {editingTemplateId ? 'Edit schedule' : 'Create schedule'}
                 </h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Configure the role, staff assignment, and weekly hours for this schedule.
+                </p>
               </div>
+              {templateForm.shiftType ? (
+                <span className="inline-flex items-center gap-2 self-start rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 ring-1 ring-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-200 dark:ring-indigo-500/30">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-indigo-500" />
+                  {templateForm.shiftType} shift
+                </span>
+              ) : null}
               <button
                 type="button"
                 onClick={closeModal}
-                className="rounded-full bg-slate-200/80 p-2 text-slate-600 transition hover:bg-slate-300 hover:text-slate-900 dark:bg-slate-700/80 dark:text-slate-300 dark:hover:bg-slate-600 dark:hover:text-white"
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-lg text-slate-500 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 aria-label="Close modal"
               >
-                ✕
+                ×
               </button>
-            </div>
-            <form className="space-y-4" onSubmit={handleTemplateSubmit}>
-              <div className="grid gap-4 md:grid-cols-2">
+            </header>
+
+            <section className="space-y-4">
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-white">General information</h4>
+              <div
+                className={`grid gap-4 ${
+                  isYouthCareWorkerRole(templateForm.role) ? 'md:grid-cols-3' : 'md:grid-cols-2'
+                }`}
+              >
                 <label className="space-y-1 text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">Schedule name</span>
+                  <span className="text-slate-600 dark:text-slate-400">Schedule name</span>
                   <input
-                    className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50 dark:focus:border-indigo-400"
                     value={templateForm.label}
                     onChange={(event) => setTemplateForm((prev) => ({ ...prev, label: event.target.value }))}
+                    placeholder="Enter schedule name"
                     required
                   />
                 </label>
                 <label className="space-y-1 text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">Role</span>
+                  <span className="text-slate-600 dark:text-slate-400">Role</span>
                   <select
-                    className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
                     value={templateForm.role}
                     onChange={(event) => setTemplateForm((prev) => ({ ...prev, role: event.target.value }))}
                     required
@@ -872,11 +891,12 @@ export const StaffMatrixPage = () => {
                     ))}
                   </select>
                 </label>
-                {isYouthCareWorkerRole(templateForm.role) && (
+
+                {isYouthCareWorkerRole(templateForm.role) ? (
                   <label className="space-y-1 text-sm">
-                    <span className="text-slate-500 dark:text-slate-400">Shift tag</span>
+                    <span className="text-slate-600 dark:text-slate-400">Shift tag</span>
                     <select
-                      className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
                       value={templateForm.shiftType}
                       onChange={(event) => {
                         const value = (event.target.value as ShiftTypeOption | '') || '';
@@ -897,12 +917,12 @@ export const StaffMatrixPage = () => {
                       Tag this Youth Care Worker schedule with one of the standard shifts.
                     </p>
                   </label>
-                )}
+                ) : null}
                 {isYouthCareWorkerRole(templateForm.role) && preferredShiftTemplates.length ? (
-                  <label className="space-y-1 text-sm">
-                    <span className="text-slate-500 dark:text-slate-400">Projection shift</span>
+                  <label className="space-y-1 text-sm md:col-span-2">
+                    <span className="text-slate-600 dark:text-slate-400">Projection shift</span>
                     <select
-                      className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
                       value={selectedShiftId}
                       onChange={(event) => {
                         const shiftId = event.target.value;
@@ -925,102 +945,107 @@ export const StaffMatrixPage = () => {
                     </p>
                   </label>
                 ) : null}
-                <label className="space-y-1 text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">Notes</span>
-                  <input
-                    className="w-full rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
-                    value={templateForm.notes}
-                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, notes: event.target.value }))}
-                  />
-                </label>
               </div>
+              <label className="space-y-1 text-sm">
+                <span className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+                  Notes <span className="text-xs font-normal text-slate-400 dark:text-slate-500">Optional</span>
+                </span>
+                <textarea
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                  value={templateForm.notes}
+                  onChange={(event) => setTemplateForm((prev) => ({ ...prev, notes: event.target.value }))}
+                  placeholder="Add any special instructions for this schedule..."
+                />
+              </label>
+            </section>
 
-              {editingTemplateId && (
-                <div className="rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 text-sm dark:border-white/10 dark:bg-white/5">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Staff assignment</p>
-                      <p className="text-slate-700 dark:text-slate-200">Attach this schedule to a staff member so it appears on their calendar.</p>
-                      {currentTemplateAssignment ? (
-                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                          Currently assigned to {currentTemplateAssignment.staff_name}
-                          {extraAssignmentsCount > 0 ? ` (+${extraAssignmentsCount} more)` : ''}
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">No staff assigned yet.</p>
-                      )}
-                    </div>
-                    {saveAssignmentMutation.isLoading || removeAssignmentMutation.isLoading ? (
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Saving…</span>
-                    ) : null}
+            {editingTemplateId ? (
+              <section className="mt-6 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-sm shadow-sm dark:border-white/10 dark:bg-white/5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Staff assignment</p>
+                    <p className="text-slate-700 dark:text-slate-200">Attach this schedule to a staff member so it appears on their calendar.</p>
+                    {currentTemplateAssignment ? (
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        Currently assigned to {currentTemplateAssignment.staff_name}
+                        {extraAssignmentsCount > 0 ? ` (+${extraAssignmentsCount} more)` : ''}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">No staff assigned yet.</p>
+                    )}
                   </div>
-                  <div className="mt-3 flex flex-wrap items-end gap-3">
-                    <div className="relative min-w-[260px] flex-1" ref={assignmentDropdownRef}>
-                      <span className="text-slate-500 dark:text-slate-400">Staff member</span>
-                      <button
-                        type="button"
-                        onClick={() => setIsAssignmentDropdownOpen((open) => !open)}
-                        className="mt-1 flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
-                        aria-haspopup="listbox"
-                        aria-expanded={isAssignmentDropdownOpen}
-                      >
-                        <span className="truncate text-left">
-                          {assignmentStaffId
-                            ? staffList.find((staff) => staff.id === assignmentStaffId)?.full_name ?? 'Selected staff'
-                            : 'Select staff'}
-                        </span>
-                        <span className="text-slate-400">▾</span>
-                      </button>
-                      {isAssignmentDropdownOpen && (
-                        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-900">
-                          <div className="border-b border-slate-100/70 bg-slate-50/70 p-2 dark:border-white/5 dark:bg-white/5">
-                            <input
-                              type="search"
-                              value={assignmentSearch}
-                              onChange={(event) => setAssignmentSearch(event.target.value)}
-                              placeholder="Search by name, email, or role"
-                              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
-                              autoFocus
-                            />
-                          </div>
-                          <div className="max-h-60 overflow-y-auto py-1">
-                            {filteredStaffList.length ? (
-                              filteredStaffList.map((staff) => (
-                                <button
-                                  type="button"
-                                  key={staff.id}
-                                  onClick={() => {
-                                    setAssignmentStaffId(staff.id);
-                                    setIsAssignmentDropdownOpen(false);
-                                  }}
-                                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-white/10 ${
-                                    assignmentStaffId === staff.id
-                                      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200'
-                                      : 'text-slate-900 dark:text-slate-100'
-                                  }`}
-                                  role="option"
-                                  aria-selected={assignmentStaffId === staff.id}
-                                >
-                                  <div className="flex-1">
-                                    <div className="font-medium">{staff.full_name}</div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                                      {[staff.role, staff.email].filter(Boolean).join(' · ')}
-                                    </div>
-                                  </div>
-                                </button>
-                              ))
-                            ) : (
-                              <div className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400">No matches.</div>
-                            )}
-                          </div>
+                  {saveAssignmentMutation.isLoading || removeAssignmentMutation.isLoading ? (
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Saving…</span>
+                  ) : null}
+                </div>
+                <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                  <div className="relative flex-1" ref={assignmentDropdownRef}>
+                    <span className="text-slate-600 dark:text-slate-400">Staff member</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAssignmentDropdownOpen((open) => !open)}
+                      className="mt-1 flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                      aria-haspopup="listbox"
+                      aria-expanded={isAssignmentDropdownOpen}
+                    >
+                      <span className="truncate text-left">
+                        {assignmentStaffId
+                          ? staffList.find((staff) => staff.id === assignmentStaffId)?.full_name ?? 'Selected staff'
+                          : 'Select staff'}
+                      </span>
+                      <span className="text-slate-400">▾</span>
+                    </button>
+                    {isAssignmentDropdownOpen && (
+                      <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-900">
+                        <div className="border-b border-slate-100/70 bg-slate-50/70 p-2 dark:border-white/5 dark:bg-white/5">
+                          <input
+                            type="search"
+                            value={assignmentSearch}
+                            onChange={(event) => setAssignmentSearch(event.target.value)}
+                            placeholder="Search by name, email, or role"
+                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                            autoFocus
+                          />
                         </div>
-                      )}
-                    </div>
+                        <div className="max-h-60 overflow-y-auto py-1">
+                          {filteredStaffList.length ? (
+                            filteredStaffList.map((staff) => (
+                              <button
+                                type="button"
+                                key={staff.id}
+                                onClick={() => {
+                                  setAssignmentStaffId(staff.id);
+                                  setIsAssignmentDropdownOpen(false);
+                                }}
+                                className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-white/10 ${assignmentStaffId === staff.id
+                                    ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200'
+                                    : 'text-slate-900 dark:text-slate-100'
+                                  }`}
+                                role="option"
+                                aria-selected={assignmentStaffId === staff.id}
+                              >
+                                <div className="flex-1">
+                                  <div className="font-medium">{staff.full_name}</div>
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                                    {[staff.role, staff.email].filter(Boolean).join(' · ')}
+                                  </div>
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400">No matches.</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={handleAssignmentSave}
                       disabled={!assignmentStaffId || saveAssignmentMutation.isLoading || deleteTemplateMutation.isLoading}
-                      className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+                      className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
                     >
                       {currentTemplateAssignment ? 'Update assignment' : 'Assign staff'}
                     </button>
@@ -1028,83 +1053,132 @@ export const StaffMatrixPage = () => {
                       <button
                         type="button"
                         onClick={handleAssignmentRemoval}
-                        disabled={removeAssignmentMutation.isLoading || saveAssignmentMutation.isLoading || deleteTemplateMutation.isLoading}
-                        className="inline-flex items-center justify-center rounded-full border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-500/10"
+                        disabled={
+                          removeAssignmentMutation.isLoading || saveAssignmentMutation.isLoading || deleteTemplateMutation.isLoading
+                        }
+                        className="inline-flex items-center justify-center rounded-lg border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-500/10"
                       >
                         Remove
                       </button>
                     ) : null}
                   </div>
                 </div>
-              )}
+              </section>
+            ) : null}
 
-              <div className="grid gap-4 md:grid-cols-3">
-                {WEEKDAYS.map((day) => (
-                  <label key={day} className="space-y-1 text-sm">
-                    <span className="text-slate-500 dark:text-slate-400">{WEEKDAY_LABELS[day]}</span>
-                    <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                      <span>Mark off day</span>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={templateForm.dayOff[day]}
-                          onChange={(event) => {
-                            const isOff = event.target.checked;
+            <section className="mt-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Weekly hours</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Toggle off-days and set start/end for each day.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTemplateForm((prev) => {
+                      const monday = prev.weeklyPattern.mon ?? { start_time: '', end_time: '' };
+                      const mondayOff = prev.dayOff.mon;
+                      const nextPattern = { ...prev.weeklyPattern };
+                      const nextDayOff = { ...prev.dayOff };
+                      (['tue', 'wed', 'thu', 'fri'] as StaffMatrixDay[]).forEach((day) => {
+                        nextDayOff[day] = mondayOff;
+                        nextPattern[day] = mondayOff ? { start_time: '', end_time: '' } : { ...monday };
+                      });
+                      return { ...prev, weeklyPattern: nextPattern, dayOff: nextDayOff };
+                    });
+                  }}
+                  className="text-xs font-semibold text-indigo-600 transition hover:text-indigo-700 dark:text-indigo-300 dark:hover:text-indigo-200"
+                >
+                  Copy Monday to weekdays
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-7">
+                {WEEKDAYS.map((day) => {
+                  const dayData = templateForm.weeklyPattern[day];
+                  const isOff = templateForm.dayOff[day];
+                  const hasError = !isOff && dayData?.end_time && dayData?.start_time && dayData.end_time <= dayData.start_time;
+
+                  return (
+                    <div
+                      key={day}
+                      className="flex h-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm ring-1 ring-white/60 dark:border-white/10 dark:bg-slate-900/60"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-slate-900 dark:text-white">{WEEKDAY_LABELS[day]}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
                             setTemplateForm((prev) => ({
                               ...prev,
-                              dayOff: { ...prev.dayOff, [day]: isOff },
+                              dayOff: { ...prev.dayOff, [day]: !prev.dayOff[day] },
                               weeklyPattern: {
                                 ...prev.weeklyPattern,
-                                [day]: isOff ? { start_time: '', end_time: '' } : prev.weeklyPattern[day],
+                                [day]: !prev.dayOff[day] ? { start_time: '', end_time: '' } : prev.weeklyPattern[day],
                               },
-                            }));
-                          }}
-                          className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500 dark:border-white/40 dark:bg-slate-900/60"
-                        />
-                      </label>
+                            }))
+                          }
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold transition ${
+                            isOff
+                              ? 'border-slate-200 bg-slate-50 text-slate-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300'
+                              : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200'
+                          }`}
+                        >
+                          {isOff ? 'Off' : 'On'}
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="space-y-1">
+                          <span className="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">Start</span>
+                          <input
+                            type="time"
+                            value={dayData?.start_time ?? ''}
+                            disabled={isOff}
+                            onChange={(event) =>
+                              setTemplateForm((prev) => ({
+                                ...prev,
+                                weeklyPattern: {
+                                  ...prev.weeklyPattern,
+                                  [day]: { ...prev.weeklyPattern[day], start_time: event.target.value },
+                                },
+                              }))
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100"
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span className="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">End</span>
+                          <input
+                            type="time"
+                            value={dayData?.end_time ?? ''}
+                            disabled={isOff}
+                            onChange={(event) =>
+                              setTemplateForm((prev) => ({
+                                ...prev,
+                                weeklyPattern: {
+                                  ...prev.weeklyPattern,
+                                  [day]: { ...prev.weeklyPattern[day], end_time: event.target.value },
+                                },
+                              }))
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-slate-800 dark:text-slate-100"
+                          />
+                        </label>
+                      </div>
+                      {hasError ? <p className="text-[11px] text-rose-600 dark:text-rose-300">End time must be after start.</p> : null}
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="time"
-                        className="rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
-                        value={templateForm.weeklyPattern[day]?.start_time ?? ''}
-                        onChange={(event) =>
-                          setTemplateForm((prev) => ({
-                            ...prev,
-                            weeklyPattern: {
-                              ...prev.weeklyPattern,
-                              [day]: { ...prev.weeklyPattern[day], start_time: event.target.value },
-                            },
-                          }))
-                        }
-                        disabled={templateForm.dayOff[day]}
-                      />
-                      <input
-                        type="time"
-                        className="rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
-                        value={templateForm.weeklyPattern[day]?.end_time ?? ''}
-                        onChange={(event) =>
-                          setTemplateForm((prev) => ({
-                            ...prev,
-                            weeklyPattern: {
-                              ...prev.weeklyPattern,
-                              [day]: { ...prev.weeklyPattern[day], end_time: event.target.value },
-                            },
-                          }))
-                        }
-                        disabled={templateForm.dayOff[day]}
-                      />
-                    </div>
-                  </label>
-                ))}
+                  );
+                })}
               </div>
+            </section>
 
-              <div className="flex flex-wrap items-center gap-3">
+            <footer className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between dark:border-white/10">
+              <div className="flex gap-2">
                 <button
-                  type="submit"
-                  className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-black/40 transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                  type="button"
+                  onClick={closeModal}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
-                  {editingTemplateId ? 'Update schedule' : 'Create schedule'}
+                  Cancel
                 </button>
                 {editingTemplateId ? (
                   <button
@@ -1116,16 +1190,15 @@ export const StaffMatrixPage = () => {
                     Delete schedule
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="text-sm font-semibold text-slate-500 underline-offset-2 hover:text-slate-900 dark:text-slate-300"
-                >
-                  Cancel
-                </button>
               </div>
-            </form>
-          </div>
+              <button
+                type="submit"
+                className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+              >
+                {editingTemplateId ? 'Update schedule' : 'Create schedule'}
+              </button>
+            </footer>
+          </form>
         </div>
       )}
 
