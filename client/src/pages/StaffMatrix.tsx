@@ -41,7 +41,6 @@ const isYouthCareWorkerRole = (role?: string | null) =>
 interface TemplateFormState {
   label: string;
   role: string;
-  color: string;
   notes: string;
   weeklyPattern: Record<StaffMatrixDay, WeeklyPatternEntry>;
   dayOff: Record<StaffMatrixDay, boolean>;
@@ -51,7 +50,6 @@ interface TemplateFormState {
 const createEmptyTemplateForm = (): TemplateFormState => ({
   label: '',
   role: '',
-  color: '#6366f1',
   notes: '',
   weeklyPattern: WEEKDAYS.reduce((acc, day) => {
     acc[day] = { start_time: '', end_time: '' };
@@ -286,7 +284,6 @@ export const StaffMatrixPage = () => {
     return {
       label: shift.label,
       role: shift.role ?? defaultRole,
-      color: shift.color ?? '#6366f1',
       notes: shift.notes ?? '',
       weeklyPattern,
       dayOff,
@@ -457,7 +454,6 @@ export const StaffMatrixPage = () => {
     const payload = {
       label: templateForm.label,
       role: templateForm.role,
-      color: templateForm.color,
       notes: templateForm.notes,
       weekly_pattern: toPayloadPattern(templateForm.weeklyPattern, templateForm.dayOff),
       shift_type: isYouthCareWorkerRole(templateForm.role) ? templateForm.shiftType || undefined : undefined,
@@ -494,7 +490,6 @@ export const StaffMatrixPage = () => {
     setTemplateForm({
       label: template.label,
       role: template.role,
-      color: template.color ?? '#6366f1',
       notes: template.notes ?? '',
       weeklyPattern: formState.weeklyPattern,
       dayOff: formState.dayOff,
@@ -930,15 +925,6 @@ export const StaffMatrixPage = () => {
                     </p>
                   </label>
                 ) : null}
-                <label className="space-y-1 text-sm">
-                  <span className="text-slate-500 dark:text-slate-400">Color</span>
-                  <input
-                    type="color"
-                    className="h-10 w-14 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none dark:border-white/10"
-                    value={templateForm.color}
-                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, color: event.target.value }))}
-                  />
-                </label>
                 <label className="space-y-1 text-sm">
                   <span className="text-slate-500 dark:text-slate-400">Notes</span>
                   <input
