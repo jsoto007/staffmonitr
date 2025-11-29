@@ -1,9 +1,9 @@
 import api from '../utils/api';
-import type { StaffMatrixCalendarPayload } from '../types';
+import type { StaffMatrixCalendarPayload, StaffMatrixPayload } from '../types';
 
 const basePath = (accountId: string) => `/accounts/${accountId}/staff-matrix`;
 
-export const fetchStaffMatrix = (accountId: string) =>
+export const fetchStaffMatrix = (accountId: string): Promise<StaffMatrixPayload> =>
   api.get(basePath(accountId)).then((response) => response.data);
 
 export const createStaffMatrixTemplate = (accountId: string, payload: Record<string, unknown>) =>

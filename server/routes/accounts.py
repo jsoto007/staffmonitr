@@ -54,6 +54,8 @@ def account_staff(account_id):
             'full_name': member.full_name,
             'role': member.role,
             'email': member.email,
+            'phone_number': member.phone_number,
+            'photo_url': member.photo_url,
         }
         for member in account.staff
     ]
@@ -71,6 +73,8 @@ def create_account_staff(account_id, *, current_staff):
     data = request.json or {}
     full_name = data.get('full_name', '').strip()
     email = (data.get('email') or '').strip().lower()
+    phone_number = (data.get('phone_number') or '').strip()
+    photo_url = (data.get('photo_url') or '').strip()
     password = data.get('password')
     role = data.get('role', 'Staff')
 
@@ -84,6 +88,8 @@ def create_account_staff(account_id, *, current_staff):
     staff = StaffMember(
         full_name=full_name,
         email=email,
+        phone_number=phone_number,
+        photo_url=photo_url,
         role=role,
         status='active',
         invited_at=datetime.utcnow(),
@@ -103,6 +109,8 @@ def create_account_staff(account_id, *, current_staff):
             'id': staff.id,
             'full_name': staff.full_name,
             'email': staff.email,
+            'phone_number': staff.phone_number,
+            'photo_url': staff.photo_url,
             'role': staff.role,
             'status': staff.status,
             'assigned_account_ids': [acct.id for acct in staff.accounts],
@@ -127,12 +135,18 @@ def update_account_staff(account_id, staff_id, *, current_staff):
         staff.role = data['role']
     if 'status' in data:
         staff.status = data['status']
+    if 'phone_number' in data:
+        staff.phone_number = data['phone_number']
+    if 'photo_url' in data:
+        staff.photo_url = data['photo_url']
     db.session.commit()
     return jsonify(
         {
             'id': staff.id,
             'full_name': staff.full_name,
             'email': staff.email,
+            'phone_number': staff.phone_number,
+            'photo_url': staff.photo_url,
             'role': staff.role,
             'status': staff.status,
             'assigned_account_ids': [acct.id for acct in staff.accounts],

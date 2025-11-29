@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAccountContext } from '../context/AccountContext';
@@ -7,7 +7,10 @@ import { fetchAccountStaff } from '../services/staff';
 import { fetchProjectionSettings } from '../services/projectionSettings';
 import {
   createStaffMatrixTemplate,
+  assignStaffToTemplate,
+  deleteStaffMatrixTemplate,
   fetchStaffMatrix,
+  unassignStaffFromTemplate,
   updateStaffMatrixTemplate,
 } from '../services/staffMatrix';
 import type {
@@ -105,6 +108,7 @@ type ScheduleRow = {
   template: StaffMatrixTemplate;
   assignmentId?: string;
   staffName: string;
+  staffId?: string;
   status: 'Assigned' | 'Vacant';
   staffRole?: string;
 };
@@ -183,7 +187,7 @@ const formatPreferenceDays = (days?: string[]) => {
   if (normalized.length === WEEKDAYS.length) {
     return 'Every day';
   }
-  if (normalized.length === 5 && ['mon', 'tue', 'wed', 'thu', 'fri'].every((day) => normalized.includes(day))) {
+  if (normalized.length === 5 && (['mon', 'tue', 'wed', 'thu', 'fri'] as StaffMatrixDay[]).every((day) => normalized.includes(day))) {
     return 'Mon-Fri';
   }
   return normalized.map((day) => WEEKDAY_LABELS[day]).join(', ');
@@ -201,6 +205,10 @@ export const StaffMatrixPage = () => {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [assignmentStaffId, setAssignmentStaffId] = useState('');
+  const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [isAssignmentDropdownOpen, setIsAssignmentDropdownOpen] = useState(false);
+  const assignmentDropdownRef = useRef<HTMLDivElement | null>(null);
 
   const { data: staffMatrix } = useQuery(
     ['staffMatrix', accountId],
@@ -251,40 +259,40 @@ export const StaffMatrixPage = () => {
     return (projectionSettings?.shifts ?? []).filter((shift) => isYouthCareWorkerRole(shift.role));
   }, [projectionSettings]);
 
-const normalizeShiftTypeLabel = (label?: string | null): ShiftTypeOption | '' => {
-  if (!label) {
-    return '';
-  }
-  const normalized = label.trim();
-  return SHIFT_TYPE_OPTIONS.includes(normalized as ShiftTypeOption) ? (normalized as ShiftTypeOption) : '';
-};
-
-const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string): TemplateFormState => {
-  const normalizedDays = (shift.days ?? []).map((day) => day.toLowerCase());
-  const shiftType = normalizeShiftTypeLabel(shift.label);
-  const daySet = new Set(normalizedDays.length ? normalizedDays : WEEKDAYS);
-
-  const weeklyPattern = WEEKDAYS.reduce<Record<StaffMatrixDay, WeeklyPatternEntry>>((acc, day) => {
-    const isOff = !daySet.has(day);
-    acc[day] = isOff ? { start_time: '', end_time: '' } : { start_time: shift.start_time, end_time: shift.end_time };
-    return acc;
-  }, createEmptyTemplateForm().weeklyPattern);
-
-  const dayOff = WEEKDAYS.reduce<Record<StaffMatrixDay, boolean>>((acc, day) => {
-    acc[day] = !daySet.has(day);
-    return acc;
-  }, createEmptyTemplateForm().dayOff);
-
-  return {
-    label: shift.label,
-    role: shift.role ?? defaultRole,
-    color: shift.color ?? '#6366f1',
-    notes: shift.notes ?? '',
-    weeklyPattern,
-    dayOff,
-    shiftType,
+  const normalizeShiftTypeLabel = (label?: string | null): ShiftTypeOption | '' => {
+    if (!label) {
+      return '';
+    }
+    const normalized = label.trim();
+    return SHIFT_TYPE_OPTIONS.includes(normalized as ShiftTypeOption) ? (normalized as ShiftTypeOption) : '';
   };
-};
+
+  const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string): TemplateFormState => {
+    const normalizedDays = (shift.days ?? []).map((day) => day.toLowerCase());
+    const shiftType = normalizeShiftTypeLabel(shift.label);
+    const daySet = new Set(normalizedDays.length ? normalizedDays : WEEKDAYS);
+
+    const weeklyPattern = WEEKDAYS.reduce<Record<StaffMatrixDay, WeeklyPatternEntry>>((acc, day) => {
+      const isOff = !daySet.has(day);
+      acc[day] = isOff ? { start_time: '', end_time: '' } : { start_time: shift.start_time, end_time: shift.end_time };
+      return acc;
+    }, createEmptyTemplateForm().weeklyPattern);
+
+    const dayOff = WEEKDAYS.reduce<Record<StaffMatrixDay, boolean>>((acc, day) => {
+      acc[day] = !daySet.has(day);
+      return acc;
+    }, createEmptyTemplateForm().dayOff);
+
+    return {
+      label: shift.label,
+      role: shift.role ?? defaultRole,
+      color: shift.color ?? '#6366f1',
+      notes: shift.notes ?? '',
+      weeklyPattern,
+      dayOff,
+      shiftType,
+    };
+  };
 
   const usePreferenceTemplate = (shift: ProjectionShiftTemplate) => {
     const updatedForm = createFormFromShift(shift, templateForm.role);
@@ -302,6 +310,19 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
     }, {});
   }, [assignments]);
 
+  useEffect(() => {
+    if (!editingTemplateId) {
+      setAssignmentStaffId('');
+      setAssignmentSearch('');
+      setIsAssignmentDropdownOpen(false);
+      return;
+    }
+    const existingAssignment = assignmentsByTemplate[editingTemplateId]?.[0];
+    setAssignmentStaffId(existingAssignment?.staff_id ?? '');
+    setAssignmentSearch('');
+    setIsAssignmentDropdownOpen(false);
+  }, [assignmentsByTemplate, editingTemplateId]);
+
   const scheduleRows = useMemo<ScheduleRow[]>(() => {
     const rows: ScheduleRow[] = [];
     templates.forEach((template) => {
@@ -313,6 +334,7 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
             template,
             assignmentId: assignment.id,
             staffName: assignment.staff_name,
+            staffId: assignment.staff_id,
             status: 'Assigned',
             staffRole: assignment.staff_role,
           });
@@ -341,6 +363,36 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
   const scheduleRoleGroups = useMemo(() => {
     return Object.entries(rowsByRole).sort(([roleA], [roleB]) => roleA.localeCompare(roleB));
   }, [rowsByRole]);
+  const currentTemplateAssignment = editingTemplateId ? assignmentsByTemplate[editingTemplateId]?.[0] : undefined;
+  const extraAssignmentsCount = Math.max(
+    0,
+    editingTemplateId ? (assignmentsByTemplate[editingTemplateId]?.length ?? 0) - 1 : 0,
+  );
+  const filteredStaffList = useMemo(() => {
+    if (!assignmentSearch.trim()) {
+      return staffList;
+    }
+    const term = assignmentSearch.trim().toLowerCase();
+    return staffList.filter(
+      (staff) =>
+        staff.full_name.toLowerCase().includes(term) ||
+        (staff.email && staff.email.toLowerCase().includes(term)) ||
+        (staff.role && staff.role.toLowerCase().includes(term)),
+    );
+  }, [assignmentSearch, staffList]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!isAssignmentDropdownOpen) {
+        return;
+      }
+      if (assignmentDropdownRef.current && !assignmentDropdownRef.current.contains(event.target as Node)) {
+        setIsAssignmentDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isAssignmentDropdownOpen]);
 
   useEffect(() => {
     setFeedback(null);
@@ -422,12 +474,18 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
     setEditingTemplateId(null);
     setTemplateForm(createEmptyTemplateForm());
     setSelectedShiftId('');
+    setAssignmentStaffId('');
+    setAssignmentSearch('');
+    setIsAssignmentDropdownOpen(false);
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setIsModalOpen(false);
     setEditingTemplateId(null);
+    setAssignmentStaffId('');
+    setAssignmentSearch('');
+    setIsAssignmentDropdownOpen(false);
   };
 
   const handleEditTemplate = (template: StaffMatrixTemplate) => {
@@ -443,7 +501,124 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
       shiftType: formState.shiftType,
     });
     setSelectedShiftId('');
+    setAssignmentSearch('');
+    setIsAssignmentDropdownOpen(false);
     setIsModalOpen(true);
+  };
+
+  const deleteTemplateMutation = useMutation(
+    (templateId: string) => deleteStaffMatrixTemplate(accountId, templateId),
+    {
+      onMutate() {
+        setErrorMessage(null);
+        setFeedback(null);
+      },
+      onSuccess(_, templateId) {
+        setFeedback('Schedule deleted.');
+        setTemplateForm(createEmptyTemplateForm());
+        setEditingTemplateId(null);
+        setIsModalOpen(false);
+        setSelectedShiftId('');
+        setAssignmentStaffId('');
+        queryClient.invalidateQueries(['staffMatrix', accountId]);
+      },
+      onError: (error) => {
+        setErrorMessage(extractErrorMessage(error));
+      },
+    },
+  );
+
+  const saveAssignmentMutation = useMutation(
+    async ({
+      templateId,
+      staffId,
+      previousAssignmentId,
+    }: {
+      templateId: string;
+      staffId: string;
+      previousAssignmentId?: string;
+    }) => {
+      if (previousAssignmentId) {
+        await unassignStaffFromTemplate(accountId, previousAssignmentId);
+      }
+      return assignStaffToTemplate(accountId, templateId, { staff_id: staffId });
+    },
+    {
+      onMutate() {
+        setErrorMessage(null);
+        setFeedback(null);
+      },
+      onSuccess(_, variables) {
+        setAssignmentStaffId(variables.staffId);
+        setFeedback(variables.previousAssignmentId ? 'Assignment updated.' : 'Staff assigned to schedule.');
+        queryClient.invalidateQueries(['staffMatrix', accountId]);
+      },
+      onError: (error) => {
+        setErrorMessage(extractErrorMessage(error));
+      },
+    },
+  );
+
+  const removeAssignmentMutation = useMutation(
+    ({ assignmentId }: { assignmentId: string }) => unassignStaffFromTemplate(accountId, assignmentId),
+    {
+      onMutate() {
+        setErrorMessage(null);
+        setFeedback(null);
+      },
+      onSuccess() {
+        setAssignmentStaffId('');
+        setFeedback('Staff removed from schedule.');
+        queryClient.invalidateQueries(['staffMatrix', accountId]);
+      },
+      onError: (error) => {
+        setErrorMessage(extractErrorMessage(error));
+      },
+    },
+  );
+
+  const handleAssignmentSave = () => {
+    if (!editingTemplateId) {
+      setErrorMessage('Open a schedule to manage assignments.');
+      return;
+    }
+    if (!assignmentStaffId) {
+      setErrorMessage('Select a staff member to assign.');
+      return;
+    }
+    const existingAssignment = assignmentsByTemplate[editingTemplateId]?.[0];
+    if (existingAssignment?.staff_id === assignmentStaffId) {
+      setFeedback('Schedule is already assigned to this staff member.');
+      return;
+    }
+    saveAssignmentMutation.mutate({
+      templateId: editingTemplateId,
+      staffId: assignmentStaffId,
+      previousAssignmentId: existingAssignment?.id,
+    });
+  };
+
+  const handleAssignmentRemoval = () => {
+    if (!editingTemplateId) {
+      return;
+    }
+    const existingAssignment = assignmentsByTemplate[editingTemplateId]?.[0];
+    if (!existingAssignment) {
+      setErrorMessage('No assignment to remove.');
+      return;
+    }
+    removeAssignmentMutation.mutate({ assignmentId: existingAssignment.id });
+  };
+
+  const handleDeleteTemplate = () => {
+    if (!editingTemplateId) {
+      return;
+    }
+    const confirmed = window.confirm('Delete this schedule? This will remove its assignments.');
+    if (!confirmed) {
+      return;
+    }
+    deleteTemplateMutation.mutate(editingTemplateId);
   };
 
   return (
@@ -572,54 +747,74 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
                           <table className="min-w-full divide-y divide-slate-200 text-sm text-slate-700 dark:divide-white/5 dark:text-slate-200">
                             <thead className="bg-white/70 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
                               <tr>
-                                <th className="py-3.5 px-4 text-left">Name</th>
-                                <th className="py-3.5 px-4 text-left">Title</th>
-                                <th className="py-3.5 px-4 text-left">Schedule</th>
-                                <th className="py-3.5 px-4 text-left">Status</th>
-                                <th className="py-3.5 px-4 text-left">Edit</th>
+                                <th className="py-3.5 pl-4 pr-3 text-left font-semibold sm:pl-6">Name</th>
+                                <th className="px-3 py-3.5 text-left font-semibold">Title</th>
+                                <th className="px-3 py-3.5 text-left font-semibold">Status</th>
+                                <th className="px-3 py-3.5 text-left font-semibold">Role</th>
+                                <th className="relative py-3.5 pl-3 pr-4 sm:pr-6">
+                                  <span className="sr-only">Edit</span>
+                                </th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 bg-white dark:bg-slate-900/40">
-                              {shiftRows.map((row) => (
-                                <tr key={row.id}>
-                                  <td className="whitespace-nowrap py-4 px-4">
-                                    <div className="text-sm font-semibold text-slate-900 dark:text-white">{row.staffName}</div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                                      {row.status === 'Assigned' ? row.staffRole ?? row.template.role : 'Vacant'}
-                                    </div>
-                                  </td>
-                                  <td className="whitespace-nowrap py-4 px-4">
-                                    <div className="text-sm font-semibold text-slate-900 dark:text-white">{row.template.label}</div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                              {shiftRows.map((row) => {
+                                const staffMember = row.staffId ? staffList.find((s) => s.id === row.staffId) : undefined;
+                                const avatarUrl = staffMember?.photo_url;
+                                const phoneNumber = staffMember?.phone_number;
+                                const email = staffMember?.email;
+
+                                return (
+                                  <tr key={row.id}>
+                                    <td className="whitespace-nowrap py-5 pl-4 pr-3 text-sm sm:pl-6">
+                                      <div className="flex items-center">
+                                        <div className="h-11 w-11 flex-shrink-0">
+                                          {avatarUrl ? (
+                                            <img className="h-11 w-11 rounded-full" src={avatarUrl} alt="" />
+                                          ) : (
+                                            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                              {row.staffName.charAt(0)}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="ml-4">
+                                          <div className="font-medium text-slate-900 dark:text-white">{row.staffName}</div>
+                                          <div className="mt-1 text-slate-500 dark:text-slate-400">{email}</div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
+                                      <div className="text-slate-900 dark:text-white">{row.status === 'Assigned' ? row.staffRole ?? row.template.role : 'Vacant'}</div>
+                                      <div className="mt-1 text-slate-500 dark:text-slate-400">{phoneNumber}</div>
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
+                                      <span
+                                        className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${row.status === 'Assigned'
+                                          ? 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-400 dark:ring-green-500/30'
+                                          : 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/30 dark:text-rose-400 dark:ring-rose-500/30'
+                                          }`}
+                                      >
+                                        {row.status === 'Assigned' ? 'Active' : 'Vacant'}
+                                      </span>
+                                    </td>
+                                    <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
                                       {row.template.role}
                                       {row.template.shift_type ? ` · ${row.template.shift_type}` : ''}
-                                    </div>
-                                  </td>
-                                  <td className="py-4 px-4 text-xs text-slate-500 dark:text-slate-400">
-                                    {formatSchedulePattern(row.template.weekly_pattern)}
-                                  </td>
-                                  <td className="py-4 px-4">
-                                    <span
-                                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                        row.status === 'Assigned'
-                                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                                          : 'bg-rose-50 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300'
-                                      }`}
-                                    >
-                                      {row.status === 'Assigned' ? 'Assigned' : 'Vacant'}
-                                    </span>
-                                  </td>
-                                  <td className="py-4 px-4 text-right">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleEditTemplate(row.template)}
-                                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-900"
-                                    >
-                                      Edit<span className="sr-only">, {row.template.label} schedule</span>
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                                      <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                                        {formatSchedulePattern(row.template.weekly_pattern)}
+                                      </div>
+                                    </td>
+                                    <td className="relative whitespace-nowrap py-5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEditTemplate(row.template)}
+                                        className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                      >
+                                        Edit<span className="sr-only">, {row.template.label}</span>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -633,7 +828,7 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
         ) : (
           <p className="text-sm text-slate-500 dark:text-slate-400">No permanent schedules defined yet.</p>
         )}
-      </section> 
+      </section>
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
@@ -754,6 +949,109 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
                 </label>
               </div>
 
+              {editingTemplateId && (
+                <div className="rounded-2xl border border-slate-200/70 bg-slate-50/70 p-4 text-sm dark:border-white/10 dark:bg-white/5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Staff assignment</p>
+                      <p className="text-slate-700 dark:text-slate-200">Attach this schedule to a staff member so it appears on their calendar.</p>
+                      {currentTemplateAssignment ? (
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          Currently assigned to {currentTemplateAssignment.staff_name}
+                          {extraAssignmentsCount > 0 ? ` (+${extraAssignmentsCount} more)` : ''}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">No staff assigned yet.</p>
+                      )}
+                    </div>
+                    {saveAssignmentMutation.isLoading || removeAssignmentMutation.isLoading ? (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">Saving…</span>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-end gap-3">
+                    <div className="relative min-w-[260px] flex-1" ref={assignmentDropdownRef}>
+                      <span className="text-slate-500 dark:text-slate-400">Staff member</span>
+                      <button
+                        type="button"
+                        onClick={() => setIsAssignmentDropdownOpen((open) => !open)}
+                        className="mt-1 flex w-full items-center justify-between rounded-2xl border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm transition hover:border-slate-300 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                        aria-haspopup="listbox"
+                        aria-expanded={isAssignmentDropdownOpen}
+                      >
+                        <span className="truncate text-left">
+                          {assignmentStaffId
+                            ? staffList.find((staff) => staff.id === assignmentStaffId)?.full_name ?? 'Selected staff'
+                            : 'Select staff'}
+                        </span>
+                        <span className="text-slate-400">▾</span>
+                      </button>
+                      {isAssignmentDropdownOpen && (
+                        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-900">
+                          <div className="border-b border-slate-100/70 bg-slate-50/70 p-2 dark:border-white/5 dark:bg-white/5">
+                            <input
+                              type="search"
+                              value={assignmentSearch}
+                              onChange={(event) => setAssignmentSearch(event.target.value)}
+                              placeholder="Search by name, email, or role"
+                              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-slate-400 focus:outline-none dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="max-h-60 overflow-y-auto py-1">
+                            {filteredStaffList.length ? (
+                              filteredStaffList.map((staff) => (
+                                <button
+                                  type="button"
+                                  key={staff.id}
+                                  onClick={() => {
+                                    setAssignmentStaffId(staff.id);
+                                    setIsAssignmentDropdownOpen(false);
+                                  }}
+                                  className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-white/10 ${
+                                    assignmentStaffId === staff.id
+                                      ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200'
+                                      : 'text-slate-900 dark:text-slate-100'
+                                  }`}
+                                  role="option"
+                                  aria-selected={assignmentStaffId === staff.id}
+                                >
+                                  <div className="flex-1">
+                                    <div className="font-medium">{staff.full_name}</div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                      {[staff.role, staff.email].filter(Boolean).join(' · ')}
+                                    </div>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className="px-3 py-3 text-sm text-slate-500 dark:text-slate-400">No matches.</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAssignmentSave}
+                      disabled={!assignmentStaffId || saveAssignmentMutation.isLoading || deleteTemplateMutation.isLoading}
+                      className="inline-flex items-center justify-center rounded-full bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+                    >
+                      {currentTemplateAssignment ? 'Update assignment' : 'Assign staff'}
+                    </button>
+                    {currentTemplateAssignment ? (
+                      <button
+                        type="button"
+                        onClick={handleAssignmentRemoval}
+                        disabled={removeAssignmentMutation.isLoading || saveAssignmentMutation.isLoading || deleteTemplateMutation.isLoading}
+                        className="inline-flex items-center justify-center rounded-full border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/50 dark:text-rose-200 dark:hover:bg-rose-500/10"
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-4 md:grid-cols-3">
                 {WEEKDAYS.map((day) => (
                   <label key={day} className="space-y-1 text-sm">
@@ -816,12 +1114,22 @@ const createFormFromShift = (shift: ProjectionShiftTemplate, defaultRole: string
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-black/40 transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                >
+                  {editingTemplateId ? 'Update schedule' : 'Create schedule'}
+                </button>
+                {editingTemplateId ? (
                   <button
-                    type="submit"
-                    className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow-lg shadow-black/40 transition hover:bg-slate-800 dark:bg-white dark:text-slate-900"
+                    type="button"
+                    onClick={handleDeleteTemplate}
+                    disabled={deleteTemplateMutation.isLoading}
+                    className="text-sm font-semibold text-rose-600 underline-offset-2 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60 dark:text-rose-300 dark:hover:text-rose-200"
                   >
-                    {editingTemplateId ? 'Update schedule' : 'Create schedule'}
+                    Delete schedule
                   </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={closeModal}

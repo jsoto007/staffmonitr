@@ -29,6 +29,8 @@ export interface StaffMember {
   full_name: string;
   role: Role;
   email: string;
+  phone_number?: string;
+  photo_url?: string;
   status: string;
   assigned_account_ids: string[];
   invite_expires_at?: string | null;
@@ -48,6 +50,7 @@ export interface ShiftTemplate {
   days?: string[];
   ratio_staff?: number;
   ratio_kids?: number;
+  notes?: string | null;
 }
 
 export interface ProjectionSettings {

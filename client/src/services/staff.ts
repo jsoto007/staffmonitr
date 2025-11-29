@@ -1,6 +1,7 @@
+import { StaffMember } from '../types';
 import api from '../utils/api';
 
-export const fetchAccountStaff = (accountId: string) =>
+export const fetchAccountStaff = (accountId: string): Promise<StaffMember[]> =>
   api.get(`/accounts/${accountId}/staff`).then((response) => response.data.staff);
 
 export const createAccountStaff = (accountId: string, payload: Record<string, unknown>) =>
