@@ -109,11 +109,13 @@ interface ProjectionSettingsProviderProps {
 
 export const ProjectionSettingsProvider = ({
   children,
-  initialShifts = [],
+  initialShifts: initialShiftsProp,
   initialCoverageMode = DEFAULT_COVERAGE_MODE,
-  initialStaff = [],
+  initialStaff: initialStaffProp,
 }: ProjectionSettingsProviderProps) => {
-  const normalizedInitialShifts = useMemo(() => initialShifts.map(normalizeShift), [initialShifts]);
+  const stableInitialShifts = useMemo(() => initialShiftsProp ?? [], [initialShiftsProp]);
+  const stableInitialStaff = useMemo(() => initialStaffProp ?? [], [initialStaffProp]);
+  const normalizedInitialShifts = useMemo(() => stableInitialShifts.map(normalizeShift), [stableInitialShifts]);
   const [shifts, dispatchShifts] = useReducer(shiftReducer, normalizedInitialShifts);
   const [staff, dispatchStaff] = useReducer(staffReducer, []);
   const [coverageMode, setCoverageModeState] = useState(initialCoverageMode);
@@ -191,9 +193,9 @@ export const ProjectionSettingsProvider = ({
 
   useEffect(() => {
     startTransition(() => {
-      dispatchStaff({ type: 'replace', staff: initialStaff });
+      dispatchStaff({ type: 'replace', staff: stableInitialStaff });
     });
-  }, [initialStaff]);
+  }, [stableInitialStaff]);
 
   const value = useMemo(
     () => ({

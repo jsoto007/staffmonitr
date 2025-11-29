@@ -397,12 +397,12 @@ export const StaffMatrixPage = () => {
   }, [accountId]);
 
   useEffect(() => {
-    if (!isYouthCareWorkerRole(templateForm.role)) {
+    if (!isYouthCareWorkerRole(templateForm.role) && (selectedShiftId || templateForm.shiftType)) {
       if (selectedShiftId) {
         setSelectedShiftId('');
       }
       if (templateForm.shiftType) {
-        setTemplateForm((prev) => ({ ...prev, shiftType: '' }));
+        setTemplateForm((prev) => (prev.shiftType ? { ...prev, shiftType: '' } : prev));
       }
     }
   }, [selectedShiftId, templateForm.role, templateForm.shiftType]);
@@ -441,10 +441,6 @@ export const StaffMatrixPage = () => {
       },
     },
   );
-
-  if (!accountId) {
-    return <p className="text-sm text-slate-600 dark:text-slate-400">Loading account…</p>;
-  }
 
   const handleTemplateSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -571,6 +567,10 @@ export const StaffMatrixPage = () => {
       },
     },
   );
+
+  if (!accountId) {
+    return <p className="text-sm text-slate-600 dark:text-slate-400">Loading account…</p>;
+  }
 
   const handleAssignmentSave = () => {
     if (!editingTemplateId) {
