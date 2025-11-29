@@ -35,7 +35,7 @@ export const PublicNavBar = () => {
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 px-4 pt-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <div className="flex items-center justify-between gap-3 rounded-full border border-white/60 bg-white/90 px-4 py-2 shadow-lg backdrop-blur-xl transition dark:border-slate-800 dark:bg-slate-900/80">
           <button
             onClick={() => navigate('/')}
@@ -105,7 +105,7 @@ export const PublicNavBar = () => {
         leaveTo="opacity-0 -translate-y-1"
       >
         <div id="public-mobile-nav" className="md:hidden">
-          <div className="mx-auto mt-3 max-w-6xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mt-3 max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/90">
               <div className="space-y-1">
                 {LINKS.map((link) => (

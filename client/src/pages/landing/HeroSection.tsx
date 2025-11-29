@@ -6,7 +6,7 @@ export const HeroSection = () => (
     <div className="pointer-events-none absolute inset-0 opacity-40" aria-hidden="true">
       <div className="absolute left-1/2 top-0 h-64 w-64 -translate-x-1/2 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500 blur-3xl" />
     </div>
-    <div className="relative mx-auto flex max-w-6xl flex-col gap-10 px-4 pb-14 pt-28 sm:pt-32 sm:pb-16 lg:flex-row lg:items-center lg:pb-20">
+    <div className="relative mx-auto flex max-w-8xl flex-col gap-10 px-4 pb-14 pt-28 sm:pt-32 sm:pb-16 lg:flex-row lg:items-center lg:pb-20">
       <div className="z-10 w-full lg:max-w-2xl">
         <p className="text-sm font-semibold uppercase tracking-[0.4em] text-indigo-500">Regulated staffing</p>
         <h1 className="mt-4 text-4xl font-semibold leading-tight tracking-tight text-slate-900 dark:text-white sm:text-5xl">

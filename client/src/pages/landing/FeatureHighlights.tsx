@@ -2,7 +2,7 @@ import { highlights } from './data';
 
 export const FeatureHighlights = () => (
   <section id="features" className="bg-slate-50 py-20 dark:bg-slate-950">
-    <div className="mx-auto max-w-6xl space-y-8 px-4 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-8xl space-y-8 px-4 sm:px-6 lg:px-8">
       <div className="space-y-2 text-center">
         <p className="text-xs uppercase tracking-[0.5em] text-indigo-500">Capabilities</p>
         <h2 className="text-3xl font-semibold text-slate-900 dark:text-white sm:text-4xl">Designed for regulated teams</h2>

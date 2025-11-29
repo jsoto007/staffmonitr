@@ -2,7 +2,7 @@ import { testimonials } from './data';
 
 export const TestimonialSection = () => (
   <section id="testimonials" className="bg-slate-900 py-20 text-white dark:bg-slate-950">
-    <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-8xl px-4 sm:px-6 lg:px-8">
       <div className="text-center">
         <p className="text-xs uppercase tracking-[0.5em] text-indigo-300">Testimonials</p>
         <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Loved by on-site operators</h2>

@@ -15,7 +15,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-blue-50 text-slate-800 transition-colors duration-300 ease-out dark:from-gray-900 dark:via-slate-900 dark:to-black dark:text-slate-100">
       <NavBarContainer />
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-20 pt-32">
+      <div className="mx-auto flex max-w-8xl flex-col gap-4 px-4 pb-20 pt-32">
         <main className="w-full flex-1 rounded-[2rem] border border-white/40 bg-white/70 p-6 shadow-lg shadow-black/5 backdrop-blur-2xl transition-all duration-300 ease-out hover:shadow-xl hover:shadow-black/10 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-xl dark:shadow-black/20">
           {children}
         </main>

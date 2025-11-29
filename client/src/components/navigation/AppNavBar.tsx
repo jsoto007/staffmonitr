@@ -196,7 +196,7 @@ export const AppNavBar = () => {
 
   return (
     <header className="fixed top-6 left-4 right-4 z-50">
-      <div className="mx-auto max-w-6xl px-2 sm:px-4">
+      <div className="mx-auto max-w-7xl px-2 sm:px-4">
         <div
           ref={navRef}
           className="relative isolate overflow-hidden rounded-[2rem] border border-white/40 bg-white/70 px-4 py-3 shadow-lg shadow-black/5 backdrop-blur-2xl transition-all duration-300 ease-out hover:shadow-xl hover:shadow-black/10 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-xl dark:shadow-black/20"
@@ -361,7 +361,7 @@ export const AppNavBar = () => {
         leaveTo="opacity-0 -translate-y-1"
       >
         <div id="mobile-nav-menu" className="md:hidden">
-          <div className="mx-auto mt-3 max-w-6xl px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto mt-3 max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="rounded-3xl border border-white/30 bg-white/85 p-4 shadow-xl backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/85">
               <div className="space-y-1">
                 {NAV_CATEGORIES.map(({ to, label, Icon }) => (
