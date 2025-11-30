@@ -19,6 +19,75 @@ class TimestampMixin:
     updated_at = db.Column(db.DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
 
+role_permissions = db.Table(
+    'role_permissions',
+    db.Column('role_id', db.String(36), db.ForeignKey('access_roles.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('permission_id', db.String(36), db.ForeignKey('permissions.id', ondelete='CASCADE'), primary_key=True),
+)
+
+role_shift_association = db.Table(
+    'role_shift_association',
+    db.Column('role_id', db.String(36), db.ForeignKey('access_roles.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('shift_id', db.String(36), db.ForeignKey('shifts.id', ondelete='CASCADE'), primary_key=True),
+)
+
+user_role_shifts = db.Table(
+    'user_role_shifts',
+    db.Column('user_role_id', db.String(36), db.ForeignKey('user_roles.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('shift_id', db.String(36), db.ForeignKey('shifts.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+class Permission(db.Model, TimestampMixin):
+    __tablename__ = 'permissions'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    code = db.Column(db.String(64), nullable=False, unique=True)
+    description = db.Column(db.String(255))
+
+
+class AccessRole(db.Model, TimestampMixin):
+    __tablename__ = 'access_roles'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = db.Column(db.String(128), nullable=False, unique=True)
+    description = db.Column(db.Text)
+    level = db.Column(db.Integer, nullable=False, doc='Lower number = higher privilege')
+
+    permissions = db.relationship(
+        'Permission',
+        secondary=role_permissions,
+        backref='access_roles',
+        lazy='joined',
+    )
+    shifts = db.relationship(
+        'Shift',
+        secondary=role_shift_association,
+        backref='access_roles',
+    )
+    assignments = db.relationship(
+        'UserRole',
+        back_populates='role',
+        cascade='all, delete-orphan',
+    )
+
+
+class UserRole(db.Model, TimestampMixin):
+    __tablename__ = 'user_roles'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    staff_id = db.Column(db.String(36), db.ForeignKey('staff_members.id', ondelete='CASCADE'), nullable=False)
+    role_id = db.Column(db.String(36), db.ForeignKey('access_roles.id', ondelete='CASCADE'), nullable=False)
+
+    staff = db.relationship('StaffMember', back_populates='user_roles')
+    role = db.relationship('AccessRole', back_populates='assignments')
+    shifts = db.relationship('Shift', secondary=user_role_shifts, backref='user_role_assignments')
+
+    __table_args__ = (
+        db.UniqueConstraint('staff_id', 'role_id', name='uq_user_roles_staff_role'),
+    )
+
+
 staff_account_association = db.Table(
     'staff_account_association',
     db.Column('staff_id', db.String(36), db.ForeignKey('staff_members.id', ondelete='CASCADE'), primary_key=True),
@@ -161,6 +230,11 @@ class StaffMember(db.Model, TimestampMixin, PermissionMixin):
         back_populates='staff',
         cascade='all, delete-orphan',
     )
+    user_roles = db.relationship(
+        'UserRole',
+        back_populates='staff',
+        cascade='all, delete-orphan',
+    )
 
 
 class Shift(db.Model, TimestampMixin):
@@ -171,6 +245,7 @@ class Shift(db.Model, TimestampMixin):
     site = db.Column(db.String(120), nullable=False)
     start_time = db.Column(db.DateTime, nullable=False)
     end_time = db.Column(db.DateTime, nullable=False)
+    name = db.Column(db.String(120))
     ratio_min = db.Column(db.Integer, default=1)
     leads_required = db.Column(db.Integer, default=1)
     is_special = db.Column(db.Boolean, default=False)

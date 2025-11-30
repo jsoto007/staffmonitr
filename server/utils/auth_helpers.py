@@ -6,6 +6,7 @@ from typing import Callable, Optional
 from flask import current_app, g, jsonify, request
 
 from ..models import StaffMember
+from ..services.role_service import get_effective_permissions_for_user
 from ..services.auth import decode_access_token
 
 
@@ -47,6 +48,12 @@ def require_auth(func: Callable) -> Callable:
     return decorated
 
 
+def _cached_permissions(staff: StaffMember) -> set[str]:
+    if getattr(g, 'current_permissions', None) is None:
+        g.current_permissions = get_effective_permissions_for_user(staff)
+    return g.current_permissions
+
+
 def require_role(*allowed_roles: str) -> Callable:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -54,6 +61,24 @@ def require_role(*allowed_roles: str) -> Callable:
             staff = kwargs.get('current_staff')
             if not staff or staff.role not in allowed_roles:
                 return jsonify({'error': 'Insufficient permissions'}), 403
+            return func(*args, **kwargs)
+
+        return decorated
+
+    return decorator
+
+
+def require_permission(*permission_codes: str) -> Callable:
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        def decorated(*args, **kwargs):
+            staff: StaffMember | None = kwargs.get('current_staff')
+            if not staff:
+                return jsonify({'error': 'Authorization required'}), 401
+            permissions = _cached_permissions(staff)
+            missing = [code for code in permission_codes if code not in permissions]
+            if missing:
+                return jsonify({'error': 'Insufficient permissions', 'missing': missing}), 403
             return func(*args, **kwargs)
 
         return decorated

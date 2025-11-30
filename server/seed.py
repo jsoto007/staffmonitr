@@ -81,8 +81,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from server.app import create_app
 from server.database import db
-from server.models import AccountGroup, Assignment, Kid, Shift, StaffMember
+from server.models import AccountGroup, AccessRole, Assignment, Kid, Shift, StaffMember, UserRole
 from server.services.auth import hash_password
+from server.services.role_service import ensure_default_permissions, resolve_permissions
 
 faker = Faker()
 faker.seed_instance(23)
@@ -141,7 +142,27 @@ def create_demo_account_group():
     return group
 
 
+def create_access_roles():
+    """Seed baseline access roles with hierarchical permissions."""
+    ensure_default_permissions()
+
+    def _role(name: str, level: int, permission_codes: list[str]) -> AccessRole:
+        permissions, missing = resolve_permissions(permission_codes)
+        if missing:
+            raise RuntimeError(f'Missing permissions during seed: {missing}')
+        role = AccessRole(name=name, level=level, description=f'{name} access level')
+        role.permissions = permissions
+        db.session.add(role)
+        return role
+
+    lead = _role('Lead Youth Care Worker', 1, ['VIEW_ALL_SCHEDULES', 'EDIT_STAFF_MATRIX', 'MANAGE_ROLES'])
+    supervisor = _role('Shift Supervisor', 2, ['VIEW_ALL_SCHEDULES', 'EDIT_STAFF_MATRIX'])
+    worker = _role('Youth Care Worker', 3, ['VIEW_OWN_SCHEDULE'])
+    return {'lead': lead, 'supervisor': supervisor, 'worker': worker}
+
+
 def create_test_accounts(group):
+    created = []
     for creds in DEMO_CREDENTIALS:
         staff = StaffMember(
             full_name=creds['full_name'],
@@ -154,6 +175,8 @@ def create_test_accounts(group):
         )
         group.staff.append(staff)
         db.session.add(staff)
+        created.append(staff)
+    return created
 
 
 def create_staff_pool(group, count=6):
@@ -228,8 +251,15 @@ def seed():
         db.drop_all()
         db.create_all()
 
+        access_roles = create_access_roles()
         demo_group = create_demo_account_group()
-        create_test_accounts(demo_group)
+        demo_staff = create_test_accounts(demo_group)
+        if demo_staff:
+            db.session.add(UserRole(staff=demo_staff[0], role=access_roles['lead']))
+        if len(demo_staff) > 1:
+            db.session.add(UserRole(staff=demo_staff[1], role=access_roles['supervisor']))
+        if len(demo_staff) > 2:
+            db.session.add(UserRole(staff=demo_staff[2], role=access_roles['worker']))
         groups = [create_account_group() for _ in range(3)] + [demo_group]
         for group in groups:
             staff_members = create_staff_pool(group, count=random.randint(5, 8))

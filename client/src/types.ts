@@ -10,6 +10,51 @@ export type Role =
   | 'Assistant Program Director'
   | 'Director';
 
+export type PermissionCode =
+  | 'VIEW_OWN_SCHEDULE'
+  | 'VIEW_ALL_SCHEDULES'
+  | 'EDIT_STAFF_MATRIX'
+  | 'MANAGE_ROLES'
+  | 'VIEW_INCIDENT_REPORTS'
+  | string;
+
+export interface Permission {
+  id: string;
+  code: PermissionCode;
+  description?: string | null;
+}
+
+export interface ShiftScope {
+  id: string;
+  name?: string | null;
+  start_time?: string | null;
+  end_time?: string | null;
+  site?: string | null;
+}
+
+export interface AccessRole {
+  id: string;
+  name: string;
+  description?: string | null;
+  level: number;
+  permissions: Permission[];
+  permissionCodes: PermissionCode[];
+  effectivePermissions?: PermissionCode[] | null;
+  shifts: ShiftScope[];
+}
+
+export interface RoleAssignment {
+  assignmentId: string;
+  role: AccessRole;
+  shiftScopes: ShiftScope[];
+}
+
+export interface MePermissionsPayload {
+  staffId: string;
+  effectivePermissions: PermissionCode[];
+  roles: RoleAssignment[];
+}
+
 export interface AccountGroup {
   id: string;
   name: string;

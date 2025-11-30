@@ -3,20 +3,30 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAccountContext } from '../context/AccountContext';
 import { useAuth } from '../context/AuthContext';
-import { fetchAccountStaff } from '../services/staff';
+import { RoleDrawer, type RoleFormState } from '../components/roles/RoleDrawer';
 import { fetchProjectionSettings } from '../services/projectionSettings';
 import {
   createStaffMatrixTemplate,
-  createStaffMatrixRole,
   assignStaffToTemplate,
-  deleteStaffMatrixRole,
   deleteStaffMatrixTemplate,
   fetchStaffMatrix,
   unassignStaffFromTemplate,
-  updateStaffMatrixRole,
   updateStaffMatrixTemplate,
 } from '../services/staffMatrix';
+import {
+  createRole,
+  fetchMePermissions,
+  fetchPermissions as fetchPermissionCatalog,
+  fetchRoleShifts,
+  fetchRoles,
+  updateRole,
+  deleteRole as deleteAccessRole,
+} from '../services/roles';
+import { fetchAccountStaff } from '../services/staff';
 import type {
+  AccessRole,
+  Permission,
+  ShiftScope,
   ShiftTemplate as ProjectionShiftTemplate,
   StaffMatrixAssignment,
   StaffMatrixDay,
@@ -210,8 +220,10 @@ export const StaffMatrixPage = () => {
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [isAssignmentDropdownOpen, setIsAssignmentDropdownOpen] = useState(false);
   const assignmentDropdownRef = useRef<HTMLDivElement | null>(null);
-  const [roleName, setRoleName] = useState('');
-  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [isRoleDrawerOpen, setIsRoleDrawerOpen] = useState(false);
+  const [roleDrawerMode, setRoleDrawerMode] = useState<'create' | 'edit'>('create');
+  const [selectedRole, setSelectedRole] = useState<AccessRole | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   const { data: staffMatrix } = useQuery(
     ['staffMatrix', accountId],
@@ -229,6 +241,25 @@ export const StaffMatrixPage = () => {
       refetchOnWindowFocus: false,
     },
   );
+  const { data: mePermissions } = useQuery(['mePermissions'], fetchMePermissions, {
+    enabled: Boolean(accountId),
+    refetchOnWindowFocus: false,
+  });
+  const effectivePermissions = mePermissions?.effectivePermissions ?? [];
+  const canManageRoles = effectivePermissions.includes('MANAGE_ROLES');
+
+  const { data: accessRoles = [] } = useQuery(['accessRoles'], fetchRoles, {
+    enabled: canManageRoles,
+    refetchOnWindowFocus: false,
+  });
+  const { data: permissionCatalog = [] } = useQuery(['permissionCatalog'], fetchPermissionCatalog, {
+    enabled: canManageRoles,
+    refetchOnWindowFocus: false,
+  });
+  const { data: shiftScopes = [] } = useQuery(['roleShiftScopes', accountId], () => fetchRoleShifts(accountId), {
+    enabled: canManageRoles,
+    refetchOnWindowFocus: false,
+  });
   const { data: projectionSettings } = useQuery(
     ['projectionSettings', accountId],
     () => fetchProjectionSettings(accountId),
@@ -244,6 +275,7 @@ export const StaffMatrixPage = () => {
   const roleOptions = useMemo(() => {
     const roles = new Set<string>();
     roleList.forEach((role) => roles.add(role.name));
+    accessRoles.forEach((role) => roles.add(role.name));
     staffList.forEach((staff) => {
       if (staff.role) {
         roles.add(staff.role);
@@ -258,7 +290,7 @@ export const StaffMatrixPage = () => {
       roles.add('Staff');
     }
     return Array.from(roles).sort();
-  }, [roleList, staffList, templates]);
+  }, [accessRoles, roleList, staffList, templates]);
 
   const preferredShiftTemplates = useMemo<ProjectionShiftTemplate[]>(() => {
     return (projectionSettings?.shifts ?? []).filter((shift) => isYouthCareWorkerRole(shift.role));
@@ -526,41 +558,55 @@ export const StaffMatrixPage = () => {
     },
   );
 
-  const createRoleMutation = useMutation(
-    (payload: { name: string }) => createStaffMatrixRole(accountId, payload),
+  const createAccessRoleMutation = useMutation(
+    (payload: RoleFormState) =>
+      createRole({
+        name: payload.name,
+        description: payload.description,
+        level: payload.level,
+        permissionCodes: payload.permissionCodes,
+        shiftIds: payload.shiftIds,
+      }),
     {
       onSuccess() {
-        setFeedback('Role added.');
-        setRoleName('');
-        setEditingRoleId(null);
-        queryClient.invalidateQueries(['staffMatrix', accountId]);
+        setFeedback('Access role created.');
+        setRoleError(null);
+        setIsRoleDrawerOpen(false);
+        setSelectedRole(null);
+        queryClient.invalidateQueries(['accessRoles']);
       },
-      onError: (error) => setErrorMessage(extractErrorMessage(error)),
+      onError: (error) => setRoleError(extractErrorMessage(error)),
     },
   );
 
-  const updateRoleMutation = useMutation(
-    ({ roleId, payload }: { roleId: string; payload: { name: string } }) =>
-      updateStaffMatrixRole(accountId, roleId, payload),
+  const updateAccessRoleMutation = useMutation(
+    ({ roleId, payload }: { roleId: string; payload: RoleFormState }) =>
+      updateRole(roleId, {
+        name: payload.name,
+        description: payload.description,
+        level: payload.level,
+        permissionCodes: payload.permissionCodes,
+        shiftIds: payload.shiftIds,
+      }),
     {
       onSuccess() {
-        setFeedback('Role updated.');
-        setRoleName('');
-        setEditingRoleId(null);
-        queryClient.invalidateQueries(['staffMatrix', accountId]);
+        setFeedback('Access role updated.');
+        setRoleError(null);
+        setIsRoleDrawerOpen(false);
+        setSelectedRole(null);
+        queryClient.invalidateQueries(['accessRoles']);
       },
-      onError: (error) => setErrorMessage(extractErrorMessage(error)),
+      onError: (error) => setRoleError(extractErrorMessage(error)),
     },
   );
 
-  const deleteRoleMutation = useMutation(
-    (roleId: string) => deleteStaffMatrixRole(accountId, roleId),
+  const deleteAccessRoleMutation = useMutation(
+    (roleId: string) => deleteAccessRole(roleId),
     {
       onSuccess() {
-        setFeedback('Role removed.');
-        setRoleName('');
-        setEditingRoleId(null);
-        queryClient.invalidateQueries(['staffMatrix', accountId]);
+        setFeedback('Access role deleted.');
+        setSelectedRole(null);
+        queryClient.invalidateQueries(['accessRoles']);
       },
       onError: (error) => setErrorMessage(extractErrorMessage(error)),
     },
@@ -614,6 +660,38 @@ export const StaffMatrixPage = () => {
       },
     },
   );
+  const isSavingRole = createAccessRoleMutation.isLoading || updateAccessRoleMutation.isLoading;
+
+  const openCreateRoleDrawer = () => {
+    setSelectedRole(null);
+    setRoleDrawerMode('create');
+    setRoleError(null);
+    setIsRoleDrawerOpen(true);
+  };
+
+  const openEditRoleDrawer = (role: AccessRole) => {
+    setSelectedRole(role);
+    setRoleDrawerMode('edit');
+    setRoleError(null);
+    setIsRoleDrawerOpen(true);
+  };
+
+  const handleRoleSubmit = (state: RoleFormState) => {
+    setRoleError(null);
+    if (roleDrawerMode === 'edit' && selectedRole) {
+      updateAccessRoleMutation.mutate({ roleId: selectedRole.id, payload: state });
+      return;
+    }
+    createAccessRoleMutation.mutate(state);
+  };
+
+  const handleDeleteAccessRole = (role: AccessRole) => {
+    const confirmed = window.confirm(`Delete the "${role.name}" role? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+    deleteAccessRoleMutation.mutate(role.id);
+  };
 
   if (!accountId) {
     return <p className="text-sm text-slate-600 dark:text-slate-400">Loading account…</p>;
@@ -663,44 +741,6 @@ export const StaffMatrixPage = () => {
     deleteTemplateMutation.mutate(editingTemplateId);
   };
 
-  const handleRoleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const trimmed = roleName.trim();
-    if (!trimmed) {
-      setErrorMessage('Role name is required.');
-      return;
-    }
-    setErrorMessage(null);
-    setFeedback(null);
-
-    if (editingRoleId) {
-      updateRoleMutation.mutate({ roleId: editingRoleId, payload: { name: trimmed } });
-      return;
-    }
-    createRoleMutation.mutate({ name: trimmed });
-  };
-
-  const handleEditRole = (roleId: string) => {
-    const target = roleList.find((role) => role.id === roleId);
-    if (!target) {
-      return;
-    }
-    setEditingRoleId(roleId);
-    setRoleName(target.name);
-  };
-
-  const handleDeleteRole = (roleId: string) => {
-    const target = roleList.find((role) => role.id === roleId);
-    if (!target) {
-      return;
-    }
-    const confirmed = window.confirm(`Delete the "${target.name}" role? This cannot be undone.`);
-    if (!confirmed) {
-      return;
-    }
-    deleteRoleMutation.mutate(roleId);
-  };
-
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-2">
@@ -722,75 +762,138 @@ export const StaffMatrixPage = () => {
         </div>
       )}
 
-      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Roles</p>
-            <p className="text-sm text-slate-700 dark:text-slate-300">Manage the roles available for program schedules.</p>
-          </div>
-          <form className="flex flex-col gap-2 md:flex-row" onSubmit={handleRoleSubmit}>
-            <input
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
-              value={roleName}
-              onChange={(event) => setRoleName(event.target.value)}
-              placeholder="Add a role (e.g., Counselor)"
-            />
-            <div className="flex gap-2 md:justify-end">
-              {editingRoleId ? (
-                <button
-                  type="button"
-                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
-                  onClick={() => {
-                    setEditingRoleId(null);
-                    setRoleName('');
-                  }}
-                >
-                  Cancel
-                </button>
-              ) : null}
+      {canManageRoles ? (
+        <section className="space-y-4 rounded-3xl border border-slate-200/70 bg-white/80 p-5 shadow-lg shadow-black/5 ring-1 ring-white/60 dark:border-white/10 dark:bg-slate-900/70 dark:shadow-[0_20px_50px_rgba(0,0,0,0.45)]">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Access roles & permissions</p>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Hierarchical control</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                Lower levels inherit permissions from higher numbers. Use this to enforce who can edit schedules and manage roles.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-500/30">
+                {effectivePermissions.includes('MANAGE_ROLES') ? 'You can manage roles' : 'View only'}
+              </span>
               <button
-                type="submit"
-                className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
-                disabled={createRoleMutation.isLoading || updateRoleMutation.isLoading}
+                type="button"
+                onClick={openCreateRoleDrawer}
+                className="rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 shadow-sm hover:bg-indigo-100 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"
               >
-                {editingRoleId ? 'Update role' : 'Add role'}
+                + Create role
               </button>
             </div>
-          </form>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {roleList.length ? (
-            roleList.map((role) => (
-              <div
-                key={role.id}
-                className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
-              >
-                <span>{role.name}</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleEditRole(role.id)}
-                    className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
-                  >
-                    Edit
-                  </button>
-                  <span aria-hidden className="text-slate-400">·</span>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteRole(role.id)}
-                    className="text-xs font-medium text-rose-600 hover:underline dark:text-rose-300"
-                    disabled={deleteRoleMutation.isLoading}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            ))
+          </div>
+
+          {accessRoles.length ? (
+            <div className="overflow-x-auto rounded-2xl border border-slate-100/80 bg-white/70 shadow-sm dark:border-white/10 dark:bg-slate-900/60">
+              <table className="min-w-full divide-y divide-slate-200 text-sm text-slate-700 dark:divide-white/5 dark:text-slate-200">
+                <thead className="bg-slate-50/70 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/50 dark:text-slate-400">
+                  <tr>
+                    <th className="py-3 pl-4 pr-3 text-left font-semibold sm:pl-6">Name</th>
+                    <th className="px-3 py-3 text-left font-semibold">Level</th>
+                    <th className="px-3 py-3 text-left font-semibold">Explicit permissions</th>
+                    <th className="px-3 py-3 text-left font-semibold">Effective (with inheritance)</th>
+                    <th className="px-3 py-3 text-left font-semibold">Shift scope</th>
+                    <th className="py-3 pl-3 pr-4 text-right font-semibold sm:pr-6">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 bg-white dark:divide-white/5 dark:bg-slate-900/40">
+                  {accessRoles.map((role) => {
+                    const explicit = role.permissionCodes;
+                    const effective = role.effectivePermissions ?? role.permissionCodes;
+                    const inherited = effective.filter((code) => !explicit.includes(code));
+                    return (
+                      <tr key={role.id}>
+                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-semibold text-slate-900 sm:pl-6 dark:text-white">
+                          {role.name}
+                          {role.description ? (
+                            <div className="text-xs font-normal text-slate-500 dark:text-slate-400">{role.description}</div>
+                          ) : null}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-4 text-sm text-slate-600 dark:text-slate-300">
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-white/5 dark:text-slate-200 dark:ring-white/10">
+                            Level {role.level}
+                          </span>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">Lower numbers inherit down the stack</div>
+                        </td>
+                        <td className="px-3 py-4 text-sm text-slate-700 dark:text-slate-200">
+                          <div className="flex flex-wrap gap-1">
+                            {explicit.map((code) => (
+                              <span
+                                key={code}
+                                className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 ring-1 ring-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-200 dark:ring-indigo-500/30"
+                              >
+                                {code}
+                              </span>
+                            ))}
+                          </div>
+                          {inherited.length ? (
+                            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              Inherits: {inherited.join(', ')}
+                            </p>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-4 text-sm text-slate-700 dark:text-slate-200">
+                          <div className="flex flex-wrap gap-1">
+                            {effective.map((code) => (
+                              <span
+                                key={code}
+                                className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-500/30"
+                              >
+                                {code}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3 py-4 text-sm text-slate-700 dark:text-slate-200">
+                          {role.shifts.length ? (
+                            <div className="flex flex-wrap gap-1">
+                              {role.shifts.map((shift) => (
+                                <span
+                                  key={shift.id}
+                                  className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200 dark:bg-white/5 dark:text-slate-200 dark:ring-white/10"
+                                >
+                                  {shift.name || shift.site || 'Shift'}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">All shifts</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                          <div className="flex justify-end gap-3">
+                            <button
+                              type="button"
+                              onClick={() => openEditRoleDrawer(role)}
+                              className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAccessRole(role)}
+                              className="text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           ) : (
-            <p className="text-sm text-slate-500 dark:text-slate-400">No roles yet. Create one to get started.</p>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/70 p-6 text-sm text-slate-600 shadow-inner dark:border-white/10 dark:bg-slate-900/40 dark:text-slate-300">
+              No access roles yet. Create one to start defining permissions.
+            </div>
           )}
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       {preferredShiftTemplates.length ? (
         <section className="space-y-4 rounded-3xl border border-slate-200/70 bg-white/80 p-6 shadow-lg shadow-black/3 ring-1 ring-white/50 dark:border-white/10 dark:bg-slate-900/80 dark:shadow-[0_25px_50px_rgba(0,0,0,0.45)]">
@@ -1357,6 +1460,20 @@ export const StaffMatrixPage = () => {
         </div>
       )}
 
+      <RoleDrawer
+        open={isRoleDrawerOpen}
+        mode={roleDrawerMode}
+        initialRole={selectedRole}
+        permissions={permissionCatalog ?? []}
+        shiftOptions={shiftScopes ?? []}
+        onClose={() => {
+          setIsRoleDrawerOpen(false);
+          setSelectedRole(null);
+        }}
+        onSubmit={handleRoleSubmit}
+        isSaving={isSavingRole}
+        error={roleError}
+      />
     </div>
   );
 };
