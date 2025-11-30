@@ -25,16 +25,16 @@ role_permissions = db.Table(
     db.Column('permission_id', db.String(36), db.ForeignKey('permissions.id', ondelete='CASCADE'), primary_key=True),
 )
 
-role_shift_association = db.Table(
-    'role_shift_association',
+role_shift_templates = db.Table(
+    'role_shift_templates',
     db.Column('role_id', db.String(36), db.ForeignKey('access_roles.id', ondelete='CASCADE'), primary_key=True),
-    db.Column('shift_id', db.String(36), db.ForeignKey('shifts.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('shift_template_id', db.String(36), db.ForeignKey('shift_templates.id', ondelete='CASCADE'), primary_key=True),
 )
 
-user_role_shifts = db.Table(
-    'user_role_shifts',
+user_role_shift_templates = db.Table(
+    'user_role_shift_templates',
     db.Column('user_role_id', db.String(36), db.ForeignKey('user_roles.id', ondelete='CASCADE'), primary_key=True),
-    db.Column('shift_id', db.String(36), db.ForeignKey('shifts.id', ondelete='CASCADE'), primary_key=True),
+    db.Column('shift_template_id', db.String(36), db.ForeignKey('shift_templates.id', ondelete='CASCADE'), primary_key=True),
 )
 
 
@@ -60,9 +60,9 @@ class AccessRole(db.Model, TimestampMixin):
         backref='access_roles',
         lazy='joined',
     )
-    shifts = db.relationship(
-        'Shift',
-        secondary=role_shift_association,
+    shift_templates = db.relationship(
+        'ShiftTemplate',
+        secondary=role_shift_templates,
         backref='access_roles',
     )
     assignments = db.relationship(
@@ -81,7 +81,7 @@ class UserRole(db.Model, TimestampMixin):
 
     staff = db.relationship('StaffMember', back_populates='user_roles')
     role = db.relationship('AccessRole', back_populates='assignments')
-    shifts = db.relationship('Shift', secondary=user_role_shifts, backref='user_role_assignments')
+    shift_templates = db.relationship('ShiftTemplate', secondary=user_role_shift_templates, backref='user_role_assignments')
 
     __table_args__ = (
         db.UniqueConstraint('staff_id', 'role_id', name='uq_user_roles_staff_role'),

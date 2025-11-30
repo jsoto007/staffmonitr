@@ -144,7 +144,8 @@ def create_demo_account_group():
 
 def create_access_roles():
     """Seed baseline access roles with hierarchical permissions."""
-    ensure_default_permissions()
+    permissions = ensure_default_permissions()
+    all_codes = [permission.code for permission in permissions]
 
     def _role(name: str, level: int, permission_codes: list[str]) -> AccessRole:
         permissions, missing = resolve_permissions(permission_codes)
@@ -155,10 +156,11 @@ def create_access_roles():
         db.session.add(role)
         return role
 
+    owner = _role('Owner Admin', 0, all_codes)
     lead = _role('Lead Youth Care Worker', 1, ['VIEW_ALL_SCHEDULES', 'EDIT_STAFF_MATRIX', 'MANAGE_ROLES'])
     supervisor = _role('Shift Supervisor', 2, ['VIEW_ALL_SCHEDULES', 'EDIT_STAFF_MATRIX'])
     worker = _role('Youth Care Worker', 3, ['VIEW_OWN_SCHEDULE'])
-    return {'lead': lead, 'supervisor': supervisor, 'worker': worker}
+    return {'owner': owner, 'lead': lead, 'supervisor': supervisor, 'worker': worker}
 
 
 def create_test_accounts(group):
@@ -255,7 +257,7 @@ def seed():
         demo_group = create_demo_account_group()
         demo_staff = create_test_accounts(demo_group)
         if demo_staff:
-            db.session.add(UserRole(staff=demo_staff[0], role=access_roles['lead']))
+            db.session.add(UserRole(staff=demo_staff[0], role=access_roles['owner']))
         if len(demo_staff) > 1:
             db.session.add(UserRole(staff=demo_staff[1], role=access_roles['supervisor']))
         if len(demo_staff) > 2:

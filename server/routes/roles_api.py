@@ -5,14 +5,14 @@ from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 from ..database import db
-from ..models import AccessRole, Permission, Shift, UserRole
+from ..models import AccessRole, Permission, ShiftTemplate, UserRole
 from ..services.role_service import (
     ensure_default_permissions,
     get_effective_permissions_for_user,
     resolve_permissions,
     serialize_permission,
     serialize_role,
-    serialize_shift,
+    serialize_shift_template,
 )
 from ..utils.auth_helpers import require_auth, require_permission
 
@@ -33,13 +33,13 @@ def list_permissions(*, current_staff):
 @require_permission('MANAGE_ROLES')
 def list_shift_scopes(*, current_staff):
     account_id = request.args.get('account_id')
-    query = Shift.query
+    query = ShiftTemplate.query
     if account_id:
         if account_id not in {account.id for account in current_staff.accounts}:
             return jsonify({'error': 'Missing access to the requested account'}), 403
         query = query.filter_by(account_group_id=account_id)
-    shifts = query.order_by(Shift.start_time).limit(200).all()
-    return jsonify([serialize_shift(shift) for shift in shifts])
+    shifts = query.order_by(ShiftTemplate.start_minute).limit(200).all()
+    return jsonify([serialize_shift_template(shift) for shift in shifts])
 
 
 @roles_bp.route('/roles', methods=['GET'])
@@ -50,7 +50,7 @@ def list_roles(*, current_staff):
     roles = (
         AccessRole.query.options(
             joinedload(AccessRole.permissions),
-            joinedload(AccessRole.shifts),
+            joinedload(AccessRole.shift_templates),
         )
         .order_by(AccessRole.level, func.lower(AccessRole.name))
         .all()
@@ -89,10 +89,10 @@ def create_role(*, current_staff):
     role.permissions = permissions
 
     if shift_ids:
-        shifts = Shift.query.filter(Shift.id.in_(shift_ids)).all()
+        shifts = ShiftTemplate.query.filter(ShiftTemplate.id.in_(shift_ids)).all()
         if len(shifts) != len(set(shift_ids)):
             return jsonify({'error': 'One or more shifts were not found.'}), 400
-        role.shifts = shifts
+        role.shift_templates = shifts
 
     db.session.add(role)
     db.session.commit()
@@ -108,7 +108,7 @@ def update_role(role_id: str, *, current_staff):
     role = (
         AccessRole.query.options(
             joinedload(AccessRole.permissions),
-            joinedload(AccessRole.shifts),
+            joinedload(AccessRole.shift_templates),
         )
         .filter_by(id=role_id)
         .first_or_404()
@@ -143,12 +143,12 @@ def update_role(role_id: str, *, current_staff):
     if 'shiftIds' in payload or 'shift_ids' in payload:
         shift_ids = payload.get('shiftIds') or payload.get('shift_ids') or []
         if shift_ids:
-            shifts = Shift.query.filter(Shift.id.in_(shift_ids)).all()
+            shifts = ShiftTemplate.query.filter(ShiftTemplate.id.in_(shift_ids)).all()
             if len(shifts) != len(set(shift_ids)):
                 return jsonify({'error': 'One or more shifts were not found.'}), 400
-            role.shifts = shifts
+            role.shift_templates = shifts
         else:
-            role.shifts = []
+            role.shift_templates = []
 
     db.session.commit()
     return jsonify(serialize_role(role))
@@ -174,8 +174,8 @@ def me_permissions(*, current_staff):
     assignments = (
         UserRole.query.options(
             joinedload(UserRole.role).joinedload(AccessRole.permissions),
-            joinedload(UserRole.role).joinedload(AccessRole.shifts),
-            joinedload(UserRole.shifts),
+            joinedload(UserRole.role).joinedload(AccessRole.shift_templates),
+            joinedload(UserRole.shift_templates),
         )
         .filter_by(staff_id=current_staff.id)
         .all()
@@ -190,7 +190,8 @@ def me_permissions(*, current_staff):
                         'assignmentId': assignment.id,
                         'role': serialize_role(assignment.role),
                         'shiftScopes': [
-                            serialize_shift(shift) for shift in (assignment.shifts or assignment.role.shifts or [])
+                            serialize_shift_template(shift)
+                            for shift in (assignment.shift_templates or assignment.role.shift_templates or [])
                         ],
                     }
                     for assignment in assignments

@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { AccessRole, Permission, ShiftScope } from '../../types';
+import { formatPermissionLabel } from '../../utils/permissions';
 
 export type RoleFormState = {
   name: string;
@@ -59,10 +60,7 @@ export const RoleDrawer = ({
     setForm(emptyForm);
   }, [initialRole, open]);
 
-  const sortedPermissions = useMemo(
-    () => [...permissions].sort((a, b) => a.code.localeCompare(b.code)),
-    [permissions],
-  );
+  const sortedPermissions = useMemo(() => [...permissions].sort((a, b) => a.code.localeCompare(b.code)), [permissions]);
   const sortedShifts = useMemo(() => [...shiftOptions].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')), [shiftOptions]);
 
   const toggleCode = (code: string) => {
@@ -164,25 +162,31 @@ export const RoleDrawer = ({
               </div>
             </div>
             <div className="grid gap-2">
-              {sortedPermissions.map((permission) => (
-                <label
-                  key={permission.id}
-                  className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5"
-                >
-                  <input
-                    type="checkbox"
-                    className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    checked={form.permissionCodes.includes(permission.code)}
-                    onChange={() => toggleCode(permission.code)}
-                  />
-                  <div>
-                    <div className="font-medium text-slate-900 dark:text-slate-50">{permission.code}</div>
-                    {permission.description ? (
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{permission.description}</p>
-                    ) : null}
-                  </div>
-                </label>
-              ))}
+              {sortedPermissions.map((permission) => {
+                const label = formatPermissionLabel(permission.code, permission.description);
+                const extraDescription =
+                  permission.description && permission.description.trim() && permission.description.trim() !== label;
+                return (
+                  <label
+                    key={permission.id}
+                    className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5"
+                    title={permission.code}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      checked={form.permissionCodes.includes(permission.code)}
+                      onChange={() => toggleCode(permission.code)}
+                    />
+                    <div>
+                      <div className="font-medium text-slate-900 dark:text-slate-50">{label}</div>
+                      {extraDescription ? (
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{permission.description}</p>
+                      ) : null}
+                    </div>
+                  </label>
+                );
+              })}
             </div>
           </div>
 
@@ -205,7 +209,7 @@ export const RoleDrawer = ({
                       <div className="font-medium">{shift.name || shift.site || 'Shift'}</div>
                       {shift.start_time && shift.end_time ? (
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {new Date(shift.start_time).toLocaleString()} – {new Date(shift.end_time).toLocaleString()}
+                          {shift.start_time} – {shift.end_time}
                         </p>
                       ) : null}
                     </div>

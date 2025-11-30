@@ -7,7 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from ..database import db
 from ..roles import Role
-from ..models import AccessRole, Permission, Shift, StaffMember, UserRole
+from ..models import AccessRole, Permission, ShiftTemplate, StaffMember, UserRole
 
 DEFAULT_PERMISSIONS: list[dict[str, str]] = [
     {'code': 'VIEW_OWN_SCHEDULE', 'description': 'View their own assigned shifts or schedules.'},
@@ -83,8 +83,8 @@ def get_effective_permissions_for_user(staff: StaffMember) -> set[str]:
     assignments = (
         UserRole.query.options(
             joinedload(UserRole.role).joinedload(AccessRole.permissions),
-            joinedload(UserRole.role).joinedload(AccessRole.shifts),
-            joinedload(UserRole.shifts),
+            joinedload(UserRole.role).joinedload(AccessRole.shift_templates),
+            joinedload(UserRole.shift_templates),
         )
         .filter_by(staff_id=staff.id)
         .all()
@@ -110,8 +110,8 @@ def can_edit_staff_matrix(staff: StaffMember, target_shift_id: str | None, times
 
     assignments = (
         UserRole.query.options(
-            joinedload(UserRole.role).joinedload(AccessRole.shifts),
-            joinedload(UserRole.shifts),
+            joinedload(UserRole.role).joinedload(AccessRole.shift_templates),
+            joinedload(UserRole.shift_templates),
         )
         .filter_by(staff_id=staff.id)
         .all()
@@ -128,15 +128,11 @@ def can_edit_staff_matrix(staff: StaffMember, target_shift_id: str | None, times
 
     # Prefer user-level shift scopes; fall back to role-level scopes.
     for assignment in assignments:
-        shift_pool = assignment.shifts or assignment.role.shifts
+        shift_pool = assignment.shift_templates or assignment.role.shift_templates
         if not shift_pool:
             return True
         for shift in shift_pool:
             if shift.id != target_shift_id:
-                continue
-            if timestamp and shift.start_time and shift.end_time:
-                if shift.start_time <= timestamp <= shift.end_time:
-                    return True
                 continue
             return True
     return False
@@ -150,13 +146,20 @@ def serialize_permission(permission: Permission) -> dict:
     }
 
 
-def serialize_shift(shift: Shift) -> dict:
+def serialize_shift_template(shift: ShiftTemplate) -> dict:
+    def _fmt(minutes: int | None) -> str | None:
+        if minutes is None:
+            return None
+        hours = minutes // 60
+        mins = minutes % 60
+        return f"{hours:02d}:{mins:02d}"
+
     return {
         'id': shift.id,
-        'name': shift.name or shift.site,
-        'start_time': shift.start_time.isoformat() if shift.start_time else None,
-        'end_time': shift.end_time.isoformat() if shift.end_time else None,
-        'site': shift.site,
+        'name': shift.label,
+        'start_time': _fmt(shift.start_minute),
+        'end_time': _fmt(shift.end_minute),
+        'site': None,
     }
 
 
@@ -169,5 +172,5 @@ def serialize_role(role: AccessRole, include_effective: bool = True) -> dict:
         'permissions': [serialize_permission(permission) for permission in role.permissions],
         'permissionCodes': [permission.code for permission in role.permissions],
         'effectivePermissions': sorted(get_effective_permissions_for_role(role)) if include_effective else None,
-        'shifts': [serialize_shift(shift) for shift in role.shifts],
+        'shifts': [serialize_shift_template(shift) for shift in role.shift_templates],
     }

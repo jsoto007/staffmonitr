@@ -17,15 +17,14 @@ import {
   createRole,
   fetchMePermissions,
   fetchPermissions as fetchPermissionCatalog,
-  fetchRoleShifts,
   fetchRoles,
   updateRole,
   deleteRole as deleteAccessRole,
 } from '../services/roles';
 import { fetchAccountStaff } from '../services/staff';
+import { formatPermissionLabel } from '../utils/permissions';
 import type {
   AccessRole,
-  Permission,
   ShiftScope,
   ShiftTemplate as ProjectionShiftTemplate,
   StaffMatrixAssignment,
@@ -256,10 +255,13 @@ export const StaffMatrixPage = () => {
     enabled: canManageRoles,
     refetchOnWindowFocus: false,
   });
-  const { data: shiftScopes = [] } = useQuery(['roleShiftScopes', accountId], () => fetchRoleShifts(accountId), {
-    enabled: canManageRoles,
-    refetchOnWindowFocus: false,
-  });
+  const permissionLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    permissionCatalog.forEach((permission) => {
+      map.set(permission.code, formatPermissionLabel(permission.code, permission.description));
+    });
+    return map;
+  }, [permissionCatalog]);
   const { data: projectionSettings } = useQuery(
     ['projectionSettings', accountId],
     () => fetchProjectionSettings(accountId),
@@ -268,6 +270,16 @@ export const StaffMatrixPage = () => {
       refetchOnWindowFocus: false,
     },
   );
+  const shiftScopeOptions: ShiftScope[] = useMemo(() => {
+    const shifts = projectionSettings?.shifts ?? [];
+    return shifts.map((shift) => ({
+      id: shift.id,
+      name: shift.label,
+      start_time: shift.start_time,
+      end_time: shift.end_time,
+      site: null,
+    }));
+  }, [projectionSettings]);
 
   const templates = staffMatrix?.templates ?? [];
   const assignments = staffMatrix?.assignments ?? [];
@@ -804,6 +816,7 @@ export const StaffMatrixPage = () => {
                     const explicit = role.permissionCodes;
                     const effective = role.effectivePermissions ?? role.permissionCodes;
                     const inherited = effective.filter((code) => !explicit.includes(code));
+                    const permissionLabel = (code: string) => permissionLabelMap.get(code) ?? formatPermissionLabel(code);
                     return (
                       <tr key={role.id}>
                         <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-semibold text-slate-900 sm:pl-6 dark:text-white">
@@ -825,13 +838,13 @@ export const StaffMatrixPage = () => {
                                 key={code}
                                 className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 ring-1 ring-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-200 dark:ring-indigo-500/30"
                               >
-                                {code}
+                                {permissionLabel(code)}
                               </span>
                             ))}
                           </div>
                           {inherited.length ? (
                             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                              Inherits: {inherited.join(', ')}
+                              Inherits: {inherited.map((code) => permissionLabel(code)).join(', ')}
                             </p>
                           ) : null}
                         </td>
@@ -842,7 +855,7 @@ export const StaffMatrixPage = () => {
                                 key={code}
                                 className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-500/30"
                               >
-                                {code}
+                                {permissionLabel(code)}
                               </span>
                             ))}
                           </div>
@@ -1465,7 +1478,7 @@ export const StaffMatrixPage = () => {
         mode={roleDrawerMode}
         initialRole={selectedRole}
         permissions={permissionCatalog ?? []}
-        shiftOptions={shiftScopes ?? []}
+        shiftOptions={shiftScopeOptions}
         onClose={() => {
           setIsRoleDrawerOpen(false);
           setSelectedRole(null);
