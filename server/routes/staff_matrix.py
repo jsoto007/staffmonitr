@@ -11,6 +11,7 @@ from ..models import (
     PermanentScheduleTemplate,
     ScheduleOverride,
     StaffMember,
+    StaffRole,
     StaffScheduleAssignment,
     SupplementalShift,
     STAFF_MATRIX_DAY_KEYS,
@@ -102,6 +103,14 @@ def _gather_assignments(account_id: str):
     for assignment in query:
         assignments[assignment.template_id].append(assignment)
     return assignments
+
+
+def _serialize_role(role: StaffRole) -> dict:
+    return {
+        'id': role.id,
+        'name': role.name,
+        'color': role.color,
+    }
 
 
 def _normalize_weekly_pattern(payload: Optional[dict]) -> dict[str, list[dict[str, int]]]:
@@ -296,6 +305,7 @@ def get_staff_matrix(account_id: str, *, current_staff):
     assignments = StaffScheduleAssignment.query.filter_by(account_group_id=account_id).all()
     overrides = ScheduleOverride.query.filter_by(account_group_id=account_id).all()
     extras = SupplementalShift.query.filter_by(account_group_id=account_id).all()
+    roles = StaffRole.query.filter_by(account_group_id=account_id).all()
 
     return jsonify(
         {
@@ -303,8 +313,96 @@ def get_staff_matrix(account_id: str, *, current_staff):
             'assignments': [_serialize_assignment(assignment) for assignment in assignments],
             'overrides': [_serialize_override(override) for override in overrides],
             'additional_shifts': [_serialize_supplemental(shift) for shift in extras],
+            'roles': [_serialize_role(role) for role in roles],
         },
     )
+
+
+@staff_matrix_bp.route('/accounts/<account_id>/staff-matrix/roles', methods=['GET'])
+@require_auth
+@require_role('Owner_admin', 'Admin')
+def list_roles(account_id: str, *, current_staff):
+    account = _authorize_account(account_id, current_staff)
+    if not account:
+        return jsonify({'error': 'Missing access to the requested account'}), 403
+
+    roles = StaffRole.query.filter_by(account_group_id=account_id).all()
+    return jsonify([_serialize_role(role) for role in roles])
+
+
+@staff_matrix_bp.route('/accounts/<account_id>/staff-matrix/roles', methods=['POST'])
+@require_auth
+@require_role('Owner_admin', 'Admin')
+def create_role(account_id: str, *, current_staff):
+    account = _authorize_account(account_id, current_staff)
+    if not account:
+        return jsonify({'error': 'Missing access to the requested account'}), 403
+
+    payload = request.json or {}
+    name = (payload.get('name') or '').strip()
+    color = (payload.get('color') or None) or None
+
+    if not name:
+        return jsonify({'error': 'Role name is required.'}), 400
+
+    existing = StaffRole.query.filter_by(account_group_id=account_id, name=name).first()
+    if existing:
+        return jsonify({'error': 'A role with this name already exists.'}), 400
+
+    role = StaffRole(account_group_id=account_id, name=name, color=color)
+    db.session.add(role)
+    db.session.commit()
+    return jsonify(_serialize_role(role)), 201
+
+
+@staff_matrix_bp.route('/accounts/<account_id>/staff-matrix/roles/<role_id>', methods=['PATCH'])
+@require_auth
+@require_role('Owner_admin', 'Admin')
+def update_role(account_id: str, role_id: str, *, current_staff):
+    account = _authorize_account(account_id, current_staff)
+    if not account:
+        return jsonify({'error': 'Missing access to the requested account'}), 403
+
+    role = StaffRole.query.filter_by(id=role_id, account_group_id=account_id).first_or_404()
+    payload = request.json or {}
+
+    if 'name' in payload:
+        new_name = (payload.get('name') or '').strip()
+        if not new_name:
+            return jsonify({'error': 'Role name cannot be empty.'}), 400
+        existing = StaffRole.query.filter(
+            StaffRole.account_group_id == account_id,
+            StaffRole.name == new_name,
+            StaffRole.id != role_id,
+        ).first()
+        if existing:
+            return jsonify({'error': 'A role with this name already exists.'}), 400
+        role.name = new_name
+
+    if 'color' in payload:
+        role.color = payload.get('color') or None
+
+    db.session.commit()
+    return jsonify(_serialize_role(role))
+
+
+@staff_matrix_bp.route('/accounts/<account_id>/staff-matrix/roles/<role_id>', methods=['DELETE'])
+@require_auth
+@require_role('Owner_admin', 'Admin')
+def delete_role(account_id: str, role_id: str, *, current_staff):
+    account = _authorize_account(account_id, current_staff)
+    if not account:
+        return jsonify({'error': 'Missing access to the requested account'}), 403
+
+    role = StaffRole.query.filter_by(id=role_id, account_group_id=account_id).first_or_404()
+
+    in_use = PermanentScheduleTemplate.query.filter_by(account_group_id=account_id, role=role.name).first()
+    if in_use:
+        return jsonify({'error': 'Role is currently used by a schedule and cannot be removed.'}), 400
+
+    db.session.delete(role)
+    db.session.commit()
+    return jsonify({'deleted': role_id})
 
 
 @staff_matrix_bp.route('/accounts/<account_id>/staff-matrix/templates', methods=['POST'])

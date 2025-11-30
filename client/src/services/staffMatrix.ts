@@ -1,5 +1,5 @@
 import api from '../utils/api';
-import type { StaffMatrixCalendarPayload, StaffMatrixPayload } from '../types';
+import type { StaffMatrixCalendarPayload, StaffMatrixPayload, StaffMatrixRole } from '../types';
 
 const basePath = (accountId: string) => `/accounts/${accountId}/staff-matrix`;
 
@@ -49,3 +49,15 @@ export const fetchStaffMatrixCalendar = (
       params: { start_date: startDate, end_date: endDate },
     })
     .then((response) => response.data);
+
+export const fetchStaffMatrixRoles = (accountId: string): Promise<StaffMatrixRole[]> =>
+  api.get(`${basePath(accountId)}/roles`).then((response) => response.data);
+
+export const createStaffMatrixRole = (accountId: string, payload: Partial<StaffMatrixRole>) =>
+  api.post(`${basePath(accountId)}/roles`, payload).then((response) => response.data);
+
+export const updateStaffMatrixRole = (accountId: string, roleId: string, payload: Partial<StaffMatrixRole>) =>
+  api.patch(`${basePath(accountId)}/roles/${roleId}`, payload).then((response) => response.data);
+
+export const deleteStaffMatrixRole = (accountId: string, roleId: string) =>
+  api.delete(`${basePath(accountId)}/roles/${roleId}`);

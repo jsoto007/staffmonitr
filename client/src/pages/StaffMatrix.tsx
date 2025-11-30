@@ -7,10 +7,13 @@ import { fetchAccountStaff } from '../services/staff';
 import { fetchProjectionSettings } from '../services/projectionSettings';
 import {
   createStaffMatrixTemplate,
+  createStaffMatrixRole,
   assignStaffToTemplate,
+  deleteStaffMatrixRole,
   deleteStaffMatrixTemplate,
   fetchStaffMatrix,
   unassignStaffFromTemplate,
+  updateStaffMatrixRole,
   updateStaffMatrixTemplate,
 } from '../services/staffMatrix';
 import type {
@@ -207,6 +210,8 @@ export const StaffMatrixPage = () => {
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [isAssignmentDropdownOpen, setIsAssignmentDropdownOpen] = useState(false);
   const assignmentDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [roleName, setRoleName] = useState('');
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
 
   const { data: staffMatrix } = useQuery(
     ['staffMatrix', accountId],
@@ -235,8 +240,10 @@ export const StaffMatrixPage = () => {
 
   const templates = staffMatrix?.templates ?? [];
   const assignments = staffMatrix?.assignments ?? [];
+  const roleList = staffMatrix?.roles ?? [];
   const roleOptions = useMemo(() => {
     const roles = new Set<string>();
+    roleList.forEach((role) => roles.add(role.name));
     staffList.forEach((staff) => {
       if (staff.role) {
         roles.add(staff.role);
@@ -251,7 +258,7 @@ export const StaffMatrixPage = () => {
       roles.add('Staff');
     }
     return Array.from(roles).sort();
-  }, [staffList, templates]);
+  }, [roleList, staffList, templates]);
 
   const preferredShiftTemplates = useMemo<ProjectionShiftTemplate[]>(() => {
     return (projectionSettings?.shifts ?? []).filter((shift) => isYouthCareWorkerRole(shift.role));
@@ -519,6 +526,46 @@ export const StaffMatrixPage = () => {
     },
   );
 
+  const createRoleMutation = useMutation(
+    (payload: { name: string }) => createStaffMatrixRole(accountId, payload),
+    {
+      onSuccess() {
+        setFeedback('Role added.');
+        setRoleName('');
+        setEditingRoleId(null);
+        queryClient.invalidateQueries(['staffMatrix', accountId]);
+      },
+      onError: (error) => setErrorMessage(extractErrorMessage(error)),
+    },
+  );
+
+  const updateRoleMutation = useMutation(
+    ({ roleId, payload }: { roleId: string; payload: { name: string } }) =>
+      updateStaffMatrixRole(accountId, roleId, payload),
+    {
+      onSuccess() {
+        setFeedback('Role updated.');
+        setRoleName('');
+        setEditingRoleId(null);
+        queryClient.invalidateQueries(['staffMatrix', accountId]);
+      },
+      onError: (error) => setErrorMessage(extractErrorMessage(error)),
+    },
+  );
+
+  const deleteRoleMutation = useMutation(
+    (roleId: string) => deleteStaffMatrixRole(accountId, roleId),
+    {
+      onSuccess() {
+        setFeedback('Role removed.');
+        setRoleName('');
+        setEditingRoleId(null);
+        queryClient.invalidateQueries(['staffMatrix', accountId]);
+      },
+      onError: (error) => setErrorMessage(extractErrorMessage(error)),
+    },
+  );
+
   const saveAssignmentMutation = useMutation(
     async ({
       templateId,
@@ -616,6 +663,44 @@ export const StaffMatrixPage = () => {
     deleteTemplateMutation.mutate(editingTemplateId);
   };
 
+  const handleRoleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const trimmed = roleName.trim();
+    if (!trimmed) {
+      setErrorMessage('Role name is required.');
+      return;
+    }
+    setErrorMessage(null);
+    setFeedback(null);
+
+    if (editingRoleId) {
+      updateRoleMutation.mutate({ roleId: editingRoleId, payload: { name: trimmed } });
+      return;
+    }
+    createRoleMutation.mutate({ name: trimmed });
+  };
+
+  const handleEditRole = (roleId: string) => {
+    const target = roleList.find((role) => role.id === roleId);
+    if (!target) {
+      return;
+    }
+    setEditingRoleId(roleId);
+    setRoleName(target.name);
+  };
+
+  const handleDeleteRole = (roleId: string) => {
+    const target = roleList.find((role) => role.id === roleId);
+    if (!target) {
+      return;
+    }
+    const confirmed = window.confirm(`Delete the "${target.name}" role? This cannot be undone.`);
+    if (!confirmed) {
+      return;
+    }
+    deleteRoleMutation.mutate(roleId);
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-2">
@@ -636,6 +721,76 @@ export const StaffMatrixPage = () => {
           {feedback}
         </div>
       )}
+
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-900/50">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Roles</p>
+            <p className="text-sm text-slate-700 dark:text-slate-300">Manage the roles available for program schedules.</p>
+          </div>
+          <form className="flex flex-col gap-2 md:flex-row" onSubmit={handleRoleSubmit}>
+            <input
+              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
+              value={roleName}
+              onChange={(event) => setRoleName(event.target.value)}
+              placeholder="Add a role (e.g., Counselor)"
+            />
+            <div className="flex gap-2 md:justify-end">
+              {editingRoleId ? (
+                <button
+                  type="button"
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-slate-300 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                  onClick={() => {
+                    setEditingRoleId(null);
+                    setRoleName('');
+                  }}
+                >
+                  Cancel
+                </button>
+              ) : null}
+              <button
+                type="submit"
+                className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+                disabled={createRoleMutation.isLoading || updateRoleMutation.isLoading}
+              >
+                {editingRoleId ? 'Update role' : 'Add role'}
+              </button>
+            </div>
+          </form>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {roleList.length ? (
+            roleList.map((role) => (
+              <div
+                key={role.id}
+                className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm text-slate-700 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+              >
+                <span>{role.name}</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleEditRole(role.id)}
+                    className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+                  >
+                    Edit
+                  </button>
+                  <span aria-hidden className="text-slate-400">·</span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRole(role.id)}
+                    className="text-xs font-medium text-rose-600 hover:underline dark:text-rose-300"
+                    disabled={deleteRoleMutation.isLoading}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No roles yet. Create one to get started.</p>
+          )}
+        </div>
+      </section>
 
       {preferredShiftTemplates.length ? (
         <section className="space-y-4 rounded-3xl border border-slate-200/70 bg-white/80 p-6 shadow-lg shadow-black/3 ring-1 ring-white/50 dark:border-white/10 dark:bg-slate-900/80 dark:shadow-[0_25px_50px_rgba(0,0,0,0.45)]">

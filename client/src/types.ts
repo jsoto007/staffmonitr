@@ -156,6 +156,13 @@ export interface StaffMatrixPayload {
   assignments: StaffMatrixAssignment[];
   overrides: StaffMatrixOverride[];
   additional_shifts: StaffSupplementalShift[];
+  roles?: StaffMatrixRole[];
+}
+
+export interface StaffMatrixRole {
+  id: string;
+  name: string;
+  color?: string | null;
 }
 
 export interface StaffMatrixCalendarEntry {

@@ -46,6 +46,11 @@ class AccountGroup(db.Model, TimestampMixin):
         back_populates='account_group',
         cascade='all, delete-orphan',
     )
+    roles = db.relationship(
+        'StaffRole',
+        back_populates='account_group',
+        cascade='all, delete-orphan',
+    )
     staff_matrix_templates = db.relationship(
         'PermanentScheduleTemplate',
         back_populates='account_group',
@@ -69,6 +74,25 @@ class ProjectionSettings(db.Model, TimestampMixin):
         back_populates='projection_settings',
         cascade='all, delete-orphan',
         order_by='ShiftTemplate.sort_order',
+    )
+
+
+class StaffRole(db.Model, TimestampMixin):
+    __tablename__ = 'staff_roles'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_group_id = db.Column(
+        db.String(36),
+        db.ForeignKey('account_groups.id', ondelete='CASCADE'),
+        nullable=False,
+    )
+    name = db.Column(db.String(128), nullable=False)
+    color = db.Column(db.String(24))
+
+    account_group = db.relationship('AccountGroup', back_populates='roles')
+
+    __table_args__ = (
+        db.UniqueConstraint('account_group_id', 'name', name='uq_staff_roles_account_name'),
     )
 
 
