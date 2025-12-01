@@ -15,7 +15,8 @@ import {
 } from '../services/assignments';
 import { fetchAccountStaff, updateAccountStaff, removeAccountStaff } from '../services/staff';
 import { useScheduleStore } from '../stores/scheduleStore';
-import { ADMIN_ROLE_SET, ROLE_OPTIONS } from '../constants/roles';
+import { ADMIN_ROLE_SET } from '../constants/roles';
+import { useStaffMatrixRoles } from '../hooks/useStaffMatrixRoles';
 const STATUS_OPTIONS = ['active', 'paused', 'inactive'] as const;
 const REQUEST_STATUS_COLORS: Record<string, string> = {
   pending: '#f97316',
@@ -31,6 +32,8 @@ export const AdminPanel = () => {
 
   const isAdmin = currentStaff ? ADMIN_ROLE_SET.has(currentStaff.role) : false;
   const accountId = selectedAccount?.id;
+  const { roles: staffMatrixRoles } = useStaffMatrixRoles(accountId);
+  const roleOptions = staffMatrixRoles.map((role) => role.name);
 
   const [shiftForm, setShiftForm] = useState({
     site: '',
@@ -211,13 +214,17 @@ export const AdminPanel = () => {
                         staffUpdateMutation.mutate({ staffId: staff.id, payload: { role: event.target.value } })
                       }
                       className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                      disabled={!roleOptions.length}
                     >
-                      {ROLE_OPTIONS.map((role) => (
+                      {roleOptions.map((role) => (
                         <option key={role} value={role}>
                           {role}
                         </option>
                       ))}
                     </select>
+                    {!roleOptions.length ? (
+                      <p className="mt-1 text-[11px] text-amber-300">Add roles in Staff Matrix to manage them here.</p>
+                    ) : null}
                   </label>
                   <label className="text-xs text-slate-400">
                     Status

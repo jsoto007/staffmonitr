@@ -66,6 +66,21 @@ def resolve_permissions(codes: Sequence[str]) -> tuple[list[Permission], list[st
     return list(by_code.values()), missing
 
 
+def _normalize_role_name(name: str) -> str:
+    """Normalize role names to compare user-friendly values and legacy enum values."""
+    return ''.join(name.replace('_', ' ').lower().split())
+
+
+def find_access_role_by_name(name: str) -> AccessRole | None:
+    """Lookup an AccessRole by name, ignoring underscores/casing/spacing."""
+    normalized_target = _normalize_role_name(name)
+    roles = AccessRole.query.all()
+    for role in roles:
+        if _normalize_role_name(role.name) == normalized_target:
+            return role
+    return None
+
+
 def get_effective_permissions_for_role(role: AccessRole) -> set[str]:
     """Return explicit + inherited permission codes for a role based on level ordering."""
     if role is None:

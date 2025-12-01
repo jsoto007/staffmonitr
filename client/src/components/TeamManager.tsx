@@ -1,19 +1,22 @@
 import { AxiosError } from 'axios';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAccountContext } from '../context/AccountContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
-import { ROLE_OPTIONS } from '../constants/roles';
+import { useStaffMatrixRoles } from '../hooks/useStaffMatrixRoles';
 import type { Role } from '../types';
 
 export const TeamManager = () => {
   const { selectedAccount } = useAccountContext();
   const { currentStaff } = useAuth();
+  const accountId = selectedAccount?.id;
+  const { roles: staffMatrixRoles } = useStaffMatrixRoles(accountId);
+  const roleOptions = staffMatrixRoles.map((role) => role.name);
   const [formState, setFormState] = useState({
     full_name: '',
     email: '',
-    role: 'Staff' as Role,
+    role: '' as Role,
     password: '',
   });
   const [status, setStatus] = useState<string | null>(null);
@@ -32,6 +35,12 @@ export const TeamManager = () => {
     },
   );
 
+  useEffect(() => {
+    if (!formState.role && roleOptions[0]) {
+      setFormState((prev) => ({ ...prev, role: roleOptions[0] as Role }));
+    }
+  }, [formState.role, roleOptions]);
+
   const handleChange = (field: keyof typeof formState, value: string) => {
     setFormState((prev) => ({ ...prev, [field]: value }));
   };
@@ -39,6 +48,10 @@ export const TeamManager = () => {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedAccount) return;
+    if (!formState.role) {
+      setStatus('Select a role from the Staff Matrix.');
+      return;
+    }
     setStatus('Creating staff account…');
     try {
       await api.post(`/accounts/${selectedAccount.id}/staff`, {
@@ -107,13 +120,19 @@ export const TeamManager = () => {
                   value={formState.role}
                   onChange={(event) => handleChange('role', event.target.value)}
                   className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+                  disabled={!roleOptions.length}
                 >
-                  {ROLE_OPTIONS.map((role) => (
+                  {roleOptions.map((role) => (
                     <option key={role} value={role}>
                       {role}
                     </option>
                   ))}
                 </select>
+                {!roleOptions.length ? (
+                  <p className="text-[11px] text-amber-300">
+                    Roles come from the Staff Matrix. Add them there first.
+                  </p>
+                ) : null}
               </label>
               <label className="space-y-1 text-xs text-slate-400">
                 Password
@@ -129,9 +148,10 @@ export const TeamManager = () => {
             </div>
             <button
               type="submit"
-              className="w-full rounded-2xl bg-gradient-to-r from-brand-500 to-brand-700 px-4 py-3 text-sm font-semibold uppercase tracking-[0.4em] text-white transition hover:opacity-90"
+              disabled={!roleOptions.length}
+              className="w-full rounded-2xl bg-gradient-to-r from-brand-500 to-brand-700 px-4 py-3 text-sm font-semibold uppercase tracking-[0.4em] text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Add to {selectedAccount.name}
+              {roleOptions.length ? `Add to ${selectedAccount.name}` : 'Add roles in Staff Matrix first'}
             </button>
           </form>
           {status && <p className="mt-2 text-xs text-slate-500">{status}</p>}

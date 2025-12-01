@@ -8,13 +8,21 @@ from sqlalchemy.orm import joinedload
 from ..database import db
 from ..models import (
     AccountGroup,
+    AccessRole,
     PermanentScheduleTemplate,
     ScheduleOverride,
     StaffMember,
-    StaffRole,
     StaffScheduleAssignment,
     SupplementalShift,
+    ShiftTemplate,
+    UserRole,
     STAFF_MATRIX_DAY_KEYS,
+)
+from ..services.role_service import (
+    ensure_default_permissions,
+    find_access_role_by_name,
+    resolve_permissions,
+    serialize_role as serialize_access_role,
 )
 from ..utils.auth_helpers import require_auth, require_role
 
@@ -105,12 +113,9 @@ def _gather_assignments(account_id: str):
     return assignments
 
 
-def _serialize_role(role: StaffRole) -> dict:
-    return {
-        'id': role.id,
-        'name': role.name,
-        'color': role.color,
-    }
+def _serialize_role(role: AccessRole) -> dict:
+    # Reuse the access-role serializer to surface permissions/levels to the UI.
+    return serialize_access_role(role)
 
 
 def _normalize_weekly_pattern(payload: Optional[dict]) -> dict[str, list[dict[str, int]]]:
@@ -305,7 +310,7 @@ def get_staff_matrix(account_id: str, *, current_staff):
     assignments = StaffScheduleAssignment.query.filter_by(account_group_id=account_id).all()
     overrides = ScheduleOverride.query.filter_by(account_group_id=account_id).all()
     extras = SupplementalShift.query.filter_by(account_group_id=account_id).all()
-    roles = StaffRole.query.filter_by(account_group_id=account_id).all()
+    roles = AccessRole.query.options(joinedload(AccessRole.permissions), joinedload(AccessRole.shift_templates)).all()
 
     return jsonify(
         {
@@ -326,7 +331,7 @@ def list_roles(account_id: str, *, current_staff):
     if not account:
         return jsonify({'error': 'Missing access to the requested account'}), 403
 
-    roles = StaffRole.query.filter_by(account_group_id=account_id).all()
+    roles = AccessRole.query.options(joinedload(AccessRole.permissions), joinedload(AccessRole.shift_templates)).all()
     return jsonify([_serialize_role(role) for role in roles])
 
 
@@ -339,17 +344,38 @@ def create_role(account_id: str, *, current_staff):
         return jsonify({'error': 'Missing access to the requested account'}), 403
 
     payload = request.json or {}
+    ensure_default_permissions()
+
     name = (payload.get('name') or '').strip()
-    color = (payload.get('color') or None) or None
+    description = (payload.get('description') or '').strip() or None
+    raw_level = payload.get('level', 3)
+    permission_codes = payload.get('permissionCodes') or []
+    shift_ids = payload.get('shiftIds') or payload.get('shift_ids') or []
 
     if not name:
         return jsonify({'error': 'Role name is required.'}), 400
+    try:
+        level = int(raw_level)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'level must be an integer.'}), 400
 
-    existing = StaffRole.query.filter_by(account_group_id=account_id, name=name).first()
+    existing = find_access_role_by_name(name)
     if existing:
         return jsonify({'error': 'A role with this name already exists.'}), 400
 
-    role = StaffRole(account_group_id=account_id, name=name, color=color)
+    permissions, missing = resolve_permissions(permission_codes)
+    if missing:
+        return jsonify({'error': f'Unknown permission codes: {", ".join(missing)}'}), 400
+
+    role = AccessRole(name=name, description=description, level=level)
+    role.permissions = permissions
+
+    if shift_ids:
+        shift_templates = ShiftTemplate.query.filter(ShiftTemplate.id.in_(shift_ids)).all()
+        if len(shift_templates) != len(set(shift_ids)):
+            return jsonify({'error': 'One or more shifts were not found.'}), 400
+        role.shift_templates = shift_templates
+
     db.session.add(role)
     db.session.commit()
     return jsonify(_serialize_role(role)), 201
@@ -363,24 +389,44 @@ def update_role(account_id: str, role_id: str, *, current_staff):
     if not account:
         return jsonify({'error': 'Missing access to the requested account'}), 403
 
-    role = StaffRole.query.filter_by(id=role_id, account_group_id=account_id).first_or_404()
+    role = AccessRole.query.options(joinedload(AccessRole.permissions), joinedload(AccessRole.shift_templates)).filter_by(
+        id=role_id
+    ).first_or_404()
     payload = request.json or {}
 
     if 'name' in payload:
         new_name = (payload.get('name') or '').strip()
         if not new_name:
             return jsonify({'error': 'Role name cannot be empty.'}), 400
-        existing = StaffRole.query.filter(
-            StaffRole.account_group_id == account_id,
-            StaffRole.name == new_name,
-            StaffRole.id != role_id,
-        ).first()
-        if existing:
+        existing = find_access_role_by_name(new_name)
+        if existing and existing.id != role_id:
             return jsonify({'error': 'A role with this name already exists.'}), 400
         role.name = new_name
 
-    if 'color' in payload:
-        role.color = payload.get('color') or None
+    if 'description' in payload:
+        role.description = (payload.get('description') or '').strip() or None
+
+    if 'level' in payload:
+        try:
+            role.level = int(payload.get('level'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'level must be an integer.'}), 400
+
+    if 'permissionCodes' in payload:
+        permissions, missing = resolve_permissions(payload.get('permissionCodes') or [])
+        if missing:
+            return jsonify({'error': f'Unknown permission codes: {", ".join(missing)}'}), 400
+        role.permissions = permissions
+
+    if 'shiftIds' in payload or 'shift_ids' in payload:
+        shift_ids = payload.get('shiftIds') or payload.get('shift_ids') or []
+        if shift_ids:
+            shift_templates = ShiftTemplate.query.filter(ShiftTemplate.id.in_(shift_ids)).all()
+            if len(shift_templates) != len(set(shift_ids)):
+                return jsonify({'error': 'One or more shifts were not found.'}), 400
+            role.shift_templates = shift_templates
+        else:
+            role.shift_templates = []
 
     db.session.commit()
     return jsonify(_serialize_role(role))
@@ -394,11 +440,15 @@ def delete_role(account_id: str, role_id: str, *, current_staff):
     if not account:
         return jsonify({'error': 'Missing access to the requested account'}), 403
 
-    role = StaffRole.query.filter_by(id=role_id, account_group_id=account_id).first_or_404()
+    role = AccessRole.query.filter_by(id=role_id).first_or_404()
 
-    in_use = PermanentScheduleTemplate.query.filter_by(account_group_id=account_id, role=role.name).first()
-    if in_use:
+    in_use_template = PermanentScheduleTemplate.query.filter_by(role=role.name).first()
+    if in_use_template:
         return jsonify({'error': 'Role is currently used by a schedule and cannot be removed.'}), 400
+
+    in_use_assignment = UserRole.query.filter_by(role_id=role_id).first()
+    if in_use_assignment:
+        return jsonify({'error': 'Role is assigned to a user and cannot be removed.'}), 400
 
     db.session.delete(role)
     db.session.commit()
@@ -420,6 +470,8 @@ def create_template(account_id: str, *, current_staff):
         return jsonify({'error': 'Template label is required.'}), 400
     if not role:
         return jsonify({'error': 'Template role is required.'}), 400
+    if not find_access_role_by_name(role):
+        return jsonify({'error': 'Template role must match an existing access role created via + Create role.'}), 400
 
     try:
         pattern = _normalize_weekly_pattern(payload.get('weekly_pattern'))
@@ -468,6 +520,8 @@ def update_template(account_id: str, template_id: str, *, current_staff):
         template.label = label.strip() or template.label
     if role is not None and role.strip():
         template.role = role.strip()
+        if not find_access_role_by_name(template.role):
+            return jsonify({'error': 'Template role must match an existing access role.'}), 400
         if not _is_youth_care_worker_role(template.role):
             template.shift_type = None
 
@@ -516,6 +570,9 @@ def assign_staff_to_template(account_id: str, template_id: str, *, current_staff
         return jsonify({'error': 'Missing access to the requested account'}), 403
 
     template = PermanentScheduleTemplate.query.filter_by(id=template_id, account_group_id=account_id).first_or_404()
+    access_role = find_access_role_by_name(template.role)
+    if not access_role:
+        return jsonify({'error': 'Template role must match an existing access role.'}), 400
     payload = request.json or {}
     staff_id = payload.get('staff_id')
     if not staff_id:
@@ -540,6 +597,11 @@ def assign_staff_to_template(account_id: str, template_id: str, *, current_staff
         start_date=parsed_start,
         end_date=parsed_end,
     )
+    # Keep staff profile + access bindings in sync with the assigned schedule role.
+    staff.role = access_role.name
+    UserRole.query.filter_by(staff_id=staff_id).delete()
+    db.session.add(UserRole(staff_id=staff_id, role_id=access_role.id))
+
     db.session.add(assignment)
     db.session.commit()
     return jsonify(_serialize_assignment(assignment)), 201

@@ -15,7 +15,8 @@ import { WeekView } from '../components/calendar/WeekView';
 import { MonthView } from '../components/calendar/MonthView';
 import { StatusChip } from '../components/StatusChip';
 import { AssignStaffModal } from '../components/calendar/AssignStaffModal';
-import { ADMIN_ROLE_SET, ROLE_OPTIONS } from '../constants/roles';
+import { ADMIN_ROLE_SET } from '../constants/roles';
+import { useStaffMatrixRoles } from '../hooks/useStaffMatrixRoles';
 import type { Role, StaffMatrixCalendarEntry, StaffMember } from '../types';
 
 type ViewMode = 'day' | 'week' | 'month';
@@ -61,6 +62,7 @@ export const CalendarPage = () => {
   const [removingAssignmentId, setRemovingAssignmentId] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState<Role | 'all'>('all');
   const [staffFilter, setStaffFilter] = useState<string | 'all'>('all');
+  const { roles: staffMatrixRoles } = useStaffMatrixRoles(accountId);
 
   const calendarRange = useMemo(() => {
     if (viewMode === 'day') {
@@ -120,11 +122,16 @@ export const CalendarPage = () => {
     return Array.from(roles).sort();
   }, [entries]);
 
+  const matrixRoleOptions = useMemo(
+    () => staffMatrixRoles.map((role) => role.name).sort((a, b) => a.localeCompare(b)),
+    [staffMatrixRoles],
+  );
+
   const combinedRoleOptions = useMemo(() => {
-    const options = new Set<string>(ROLE_OPTIONS);
+    const options = new Set<string>(matrixRoleOptions);
     derivedRoleOptions.forEach((role) => options.add(role));
     return Array.from(options);
-  }, [derivedRoleOptions]);
+  }, [derivedRoleOptions, matrixRoleOptions]);
 
   const { data: staffList = [] } = useQuery<StaffMember[]>(
     ['accountStaff', accountId],

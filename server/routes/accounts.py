@@ -5,10 +5,11 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from ..database import db
-from ..models import AccountGroup, Invitation, StaffMember
-from ..roles import INVITE_ALLOWED_ROLE_VALUES, MANAGER_ROLE_VALUES, ROLES, SUPER_ADMIN_ROLE_VALUES
+from ..models import AccountGroup, Invitation, StaffMember, UserRole
+from ..roles import INVITE_ALLOWED_ROLE_VALUES, MANAGER_ROLE_VALUES, SUPER_ADMIN_ROLE_VALUES
 from ..schemas import CreateAccountSchema, InviteCreateSchema
 from ..services.auth import create_invite_token, hash_invite_token, hash_password
+from ..services.role_service import find_access_role_by_name
 from ..utils.auth_helpers import require_auth, require_role
 
 accounts_bp = Blueprint('accounts', __name__)
@@ -80,8 +81,9 @@ def create_account_staff(account_id, *, current_staff):
 
     if not (full_name and email and password):
         return jsonify({'error': 'full_name, email, and password are required'}), 400
-    if role not in ROLES:
-        return jsonify({'error': 'Unsupported role'}), 400
+    access_role = find_access_role_by_name(role)
+    if not access_role:
+        return jsonify({'error': 'Unsupported role. Create it via + Create role first.'}), 400
     if StaffMember.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already registered'}), 409
 
@@ -90,7 +92,7 @@ def create_account_staff(account_id, *, current_staff):
         email=email,
         phone_number=phone_number,
         photo_url=photo_url,
-        role=role,
+        role=access_role.name,
         status='active',
         invited_at=datetime.utcnow(),
         password_hash=hash_password(password),
@@ -99,6 +101,8 @@ def create_account_staff(account_id, *, current_staff):
 
     try:
         db.session.add(staff)
+        db.session.flush()
+        db.session.add(UserRole(staff_id=staff.id, role_id=access_role.id))
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
@@ -130,9 +134,12 @@ def update_account_staff(account_id, staff_id, *, current_staff):
         return jsonify({'error': 'Staff not assigned to this account'}), 404
     data = request.json or {}
     if 'role' in data:
-        if data['role'] not in ROLES:
-            return jsonify({'error': 'Unsupported role'}), 400
-        staff.role = data['role']
+        access_role = find_access_role_by_name(data['role'])
+        if not access_role:
+            return jsonify({'error': 'Unsupported role. Create it via + Create role first.'}), 400
+        staff.role = access_role.name
+        UserRole.query.filter_by(staff_id=staff.id).delete()
+        db.session.add(UserRole(staff_id=staff.id, role_id=access_role.id))
     if 'status' in data:
         staff.status = data['status']
     if 'phone_number' in data:
@@ -148,10 +155,10 @@ def update_account_staff(account_id, staff_id, *, current_staff):
             'phone_number': staff.phone_number,
             'photo_url': staff.photo_url,
             'role': staff.role,
-            'status': staff.status,
-            'assigned_account_ids': [acct.id for acct in staff.accounts],
-        }
-    )
+        'status': staff.status,
+        'assigned_account_ids': [acct.id for acct in staff.accounts],
+    }
+)
 
 
 @accounts_bp.route('/accounts/<account_id>/staff/<staff_id>', methods=['DELETE'])

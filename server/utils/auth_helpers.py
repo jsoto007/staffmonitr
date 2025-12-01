@@ -55,11 +55,16 @@ def _cached_permissions(staff: StaffMember) -> set[str]:
 
 
 def require_role(*allowed_roles: str) -> Callable:
+    def _normalize(value: str) -> str:
+        return ''.join(value.replace('_', ' ').lower().split())
+
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def decorated(*args, **kwargs):
             staff = kwargs.get('current_staff')
-            if not staff or staff.role not in allowed_roles:
+            if not staff:
+                return jsonify({'error': 'Insufficient permissions'}), 403
+            if allowed_roles and all(_normalize(staff.role) != _normalize(role) for role in allowed_roles):
                 return jsonify({'error': 'Insufficient permissions'}), 403
             return func(*args, **kwargs)
 

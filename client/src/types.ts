@@ -8,7 +8,8 @@ export type Role =
   | 'Lead'
   | 'Residence Manager'
   | 'Assistant Program Director'
-  | 'Director';
+  | 'Director'
+  | string;
 
 export type PermissionCode =
   | 'VIEW_OWN_SCHEDULE'
@@ -204,11 +205,7 @@ export interface StaffMatrixPayload {
   roles?: StaffMatrixRole[];
 }
 
-export interface StaffMatrixRole {
-  id: string;
-  name: string;
-  color?: string | null;
-}
+export type StaffMatrixRole = AccessRole & { color?: string | null };
 
 export interface StaffMatrixCalendarEntry {
   id: string;

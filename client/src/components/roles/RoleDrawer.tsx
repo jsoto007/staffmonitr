@@ -16,6 +16,7 @@ type RoleDrawerProps = {
   initialRole?: AccessRole | null;
   permissions: Permission[];
   shiftOptions: ShiftScope[];
+  roleOptions: string[];
   onClose: () => void;
   onSubmit: (state: RoleFormState) => void;
   isSaving?: boolean;
@@ -36,12 +37,20 @@ export const RoleDrawer = ({
   initialRole,
   permissions,
   shiftOptions,
+  roleOptions,
   onClose,
   onSubmit,
   isSaving = false,
   error,
 }: RoleDrawerProps) => {
   const [form, setForm] = useState<RoleFormState>(emptyForm);
+  const sortedRoleOptions = useMemo(() => {
+    const names = new Set(roleOptions);
+    if (initialRole?.name) {
+      names.add(initialRole.name);
+    }
+    return Array.from(names).sort((a, b) => a.localeCompare(b));
+  }, [initialRole?.name, roleOptions]);
 
   useEffect(() => {
     if (!open) {
@@ -57,8 +66,11 @@ export const RoleDrawer = ({
       });
       return;
     }
-    setForm(emptyForm);
-  }, [initialRole, open]);
+    setForm((prev) => ({
+      ...emptyForm,
+      name: sortedRoleOptions[0] ?? '',
+    }));
+  }, [initialRole, open, sortedRoleOptions]);
 
   const sortedPermissions = useMemo(() => [...permissions].sort((a, b) => a.code.localeCompare(b.code)), [permissions]);
   const sortedShifts = useMemo(() => [...shiftOptions].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')), [shiftOptions]);
@@ -125,12 +137,24 @@ export const RoleDrawer = ({
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Role name</label>
             <input
+              list="staff-matrix-role-options"
               className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-white/10 dark:bg-slate-900/70 dark:text-slate-50"
               value={form.name}
               onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="Lead Youth Care Worker"
+              placeholder="Type a job title"
               required
             />
+            {sortedRoleOptions.length ? (
+              <datalist id="staff-matrix-role-options">
+                {sortedRoleOptions.map((option) => (
+                  <option key={option} value={option} />
+                ))}
+              </datalist>
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Create job titles here; they become the source of truth for roles.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-200">Description</label>

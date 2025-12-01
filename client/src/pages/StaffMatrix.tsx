@@ -219,6 +219,7 @@ export const StaffMatrixPage = () => {
   const [assignmentSearch, setAssignmentSearch] = useState('');
   const [isAssignmentDropdownOpen, setIsAssignmentDropdownOpen] = useState(false);
   const assignmentDropdownRef = useRef<HTMLDivElement | null>(null);
+  const modalRef = useRef<HTMLFormElement | null>(null);
   const [isRoleDrawerOpen, setIsRoleDrawerOpen] = useState(false);
   const [roleDrawerMode, setRoleDrawerMode] = useState<'create' | 'edit'>('create');
   const [selectedRole, setSelectedRole] = useState<AccessRole | null>(null);
@@ -287,22 +288,12 @@ export const StaffMatrixPage = () => {
   const roleOptions = useMemo(() => {
     const roles = new Set<string>();
     roleList.forEach((role) => roles.add(role.name));
-    accessRoles.forEach((role) => roles.add(role.name));
-    staffList.forEach((staff) => {
-      if (staff.role) {
-        roles.add(staff.role);
-      }
-    });
-    templates.forEach((template) => {
-      if (template.role) {
-        roles.add(template.role);
-      }
-    });
-    if (!roles.size) {
-      roles.add('Staff');
+    // Preserve the currently selected role when editing legacy templates not yet in the Staff Matrix role list.
+    if (templateForm.role) {
+      roles.add(templateForm.role);
     }
-    return Array.from(roles).sort();
-  }, [accessRoles, roleList, staffList, templates]);
+    return Array.from(roles).sort((a, b) => a.localeCompare(b));
+  }, [roleList, templateForm.role]);
 
   const preferredShiftTemplates = useMemo<ProjectionShiftTemplate[]>(() => {
     return (projectionSettings?.shifts ?? []).filter((shift) => isYouthCareWorkerRole(shift.role));
@@ -443,6 +434,14 @@ export const StaffMatrixPage = () => {
   }, [isAssignmentDropdownOpen]);
 
   useEffect(() => {
+    if (!isModalOpen || !modalRef.current) {
+      return;
+    }
+    modalRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    modalRef.current.focus({ preventScroll: true });
+  }, [isModalOpen]);
+
+  useEffect(() => {
     setFeedback(null);
     setErrorMessage(null);
   }, [accountId]);
@@ -580,7 +579,11 @@ export const StaffMatrixPage = () => {
         shiftIds: payload.shiftIds,
       }),
     {
-      onSuccess() {
+      async onSuccess(_, variables) {
+        if (accountId && variables?.name) {
+          queryClient.invalidateQueries(['staffMatrix', accountId]);
+          queryClient.invalidateQueries(['staffMatrixRoles', accountId]);
+        }
         setFeedback('Access role created.');
         setRoleError(null);
         setIsRoleDrawerOpen(false);
@@ -601,7 +604,11 @@ export const StaffMatrixPage = () => {
         shiftIds: payload.shiftIds,
       }),
     {
-      onSuccess() {
+      async onSuccess(_, variables) {
+        if (accountId) {
+          queryClient.invalidateQueries(['staffMatrix', accountId]);
+          queryClient.invalidateQueries(['staffMatrixRoles', accountId]);
+        }
         setFeedback('Access role updated.');
         setRoleError(null);
         setIsRoleDrawerOpen(false);
@@ -615,7 +622,11 @@ export const StaffMatrixPage = () => {
   const deleteAccessRoleMutation = useMutation(
     (roleId: string) => deleteAccessRole(roleId),
     {
-      onSuccess() {
+      async onSuccess(_, roleId) {
+        if (accountId) {
+          queryClient.invalidateQueries(['staffMatrix', accountId]);
+          queryClient.invalidateQueries(['staffMatrixRoles', accountId]);
+        }
         setFeedback('Access role deleted.');
         setSelectedRole(null);
         queryClient.invalidateQueries(['accessRoles']);
@@ -782,6 +793,7 @@ export const StaffMatrixPage = () => {
               <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Hierarchical control</h2>
               <p className="text-sm text-slate-600 dark:text-slate-300">
                 Lower levels inherit permissions from higher numbers. Use this to enforce who can edit schedules and manage roles.
+                Job titles are created here and become the single source of truth across the app.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1097,9 +1109,11 @@ export const StaffMatrixPage = () => {
       </section>
 
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center px-4 py-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={closeModal} />
           <form
+            ref={modalRef}
+            tabIndex={-1}
             onSubmit={handleTemplateSubmit}
             className="relative w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl bg-white px-6 py-7 shadow-2xl ring-1 ring-slate-900/5 md:px-9 md:py-8 dark:bg-slate-900"
           >
@@ -1153,6 +1167,7 @@ export const StaffMatrixPage = () => {
                     value={templateForm.role}
                     onChange={(event) => setTemplateForm((prev) => ({ ...prev, role: event.target.value }))}
                     required
+                    disabled={!roleOptions.length}
                   >
                     <option value="">Select role</option>
                     {roleOptions.map((role) => (
@@ -1161,6 +1176,11 @@ export const StaffMatrixPage = () => {
                       </option>
                     ))}
                   </select>
+                  {!roleOptions.length ? (
+                    <p className="text-xs text-amber-600 dark:text-amber-300">
+                      Define roles in the Staff Matrix to use them as job titles.
+                    </p>
+                  ) : null}
                 </label>
 
                 {isYouthCareWorkerRole(templateForm.role) ? (
@@ -1479,6 +1499,7 @@ export const StaffMatrixPage = () => {
         initialRole={selectedRole}
         permissions={permissionCatalog ?? []}
         shiftOptions={shiftScopeOptions}
+        roleOptions={roleOptions}
         onClose={() => {
           setIsRoleDrawerOpen(false);
           setSelectedRole(null);

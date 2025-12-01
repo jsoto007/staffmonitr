@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
 import { useAccountContext } from '../context/AccountContext';
 import { useAuth } from '../context/AuthContext';
-import { ADMIN_ROLE_SET, ROLE_OPTIONS } from '../constants/roles';
+import { ADMIN_ROLE_SET } from '../constants/roles';
+import { useStaffMatrixRoles } from '../hooks/useStaffMatrixRoles';
 import { createAccountStaff, fetchAccountStaff, updateAccountStaff } from '../services/staff';
 import type { StaffMember } from '../types';
 
@@ -18,11 +19,20 @@ export const StaffSettingsPage = () => {
   const accountId = !authLoading && isAuthenticated ? selectedAccount?.id ?? '' : '';
   const isAdmin = ADMIN_ROLE_SET.has(currentStaff?.role ?? '');
 
-  const [newStaff, setNewStaff] = useState({ full_name: '', email: '', role: ROLE_OPTIONS[0], password: '' });
+  const { roles: staffMatrixRoles } = useStaffMatrixRoles(accountId);
+  const roleOptions = useMemo(() => staffMatrixRoles.map((role) => role.name), [staffMatrixRoles]);
+
+  const [newStaff, setNewStaff] = useState({ full_name: '', email: '', role: '', password: '' });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{ full_name: string; email: string }>({ full_name: '', email: '' });
   const [feedback, setFeedback] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  useEffect(() => {
+    if (!newStaff.role && roleOptions[0]) {
+      setNewStaff((prev) => ({ ...prev, role: roleOptions[0] }));
+    }
+  }, [newStaff.role, roleOptions]);
 
   const {
     data: staff = [],
@@ -56,7 +66,7 @@ export const StaffSettingsPage = () => {
     (payload: { full_name: string; email: string; role: string; password: string }) => createAccountStaff(accountId, payload),
     {
       onSuccess: () => {
-        setNewStaff({ full_name: '', email: '', role: ROLE_OPTIONS[0], password: '' });
+        setNewStaff({ full_name: '', email: '', role: roleOptions[0] ?? '', password: '' });
         setFeedback('Staff member added.');
         invalidateStaff();
       },
@@ -82,6 +92,10 @@ export const StaffSettingsPage = () => {
     setFeedback(null);
     if (!newStaff.full_name.trim() || !newStaff.email.trim() || !newStaff.password.trim()) {
       setFeedback('Name, email, and password are required.');
+      return;
+    }
+    if (!newStaff.role) {
+      setFeedback('Select a role from the Staff Matrix.');
       return;
     }
     createMutation.mutate({
@@ -182,13 +196,19 @@ export const StaffSettingsPage = () => {
                 value={newStaff.role}
                 onChange={(event) => setNewStaff((prev) => ({ ...prev, role: event.target.value }))}
                 className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                disabled={!roleOptions.length}
               >
-                {ROLE_OPTIONS.map((role) => (
+                {roleOptions.map((role) => (
                   <option key={role} value={role} className="bg-slate-900 text-white">
                     {role}
                   </option>
                 ))}
               </select>
+              {!roleOptions.length ? (
+                <p className="mt-1 text-[11px] text-amber-300">
+                  Define roles in the Staff Matrix first. Roles there are the source of truth.
+                </p>
+              ) : null}
             </label>
             <label className="block text-xs uppercase tracking-[0.3em] text-slate-400">
               Password
@@ -202,10 +222,10 @@ export const StaffSettingsPage = () => {
             </label>
             <button
               type="submit"
-              disabled={createMutation.isLoading}
+              disabled={createMutation.isLoading || !newStaff.role || !roleOptions.length}
               className="w-full rounded-2xl border border-transparent bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {createMutation.isLoading ? 'Adding…' : 'Add staff member'}
+              {createMutation.isLoading ? 'Adding…' : roleOptions.length ? 'Add staff member' : 'Add roles in Staff Matrix'}
             </button>
           </form>
         </article>
@@ -309,13 +329,19 @@ export const StaffSettingsPage = () => {
                         value={member.role}
                         onChange={(event) => handleRoleChange(member.id, event.target.value)}
                         className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-900/60 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                        disabled={!roleOptions.length}
                       >
-                        {ROLE_OPTIONS.map((role) => (
+                        {roleOptions.map((role) => (
                           <option key={role} value={role} className="bg-slate-900 text-white">
                             {role}
                           </option>
                         ))}
                       </select>
+                      {!roleOptions.length ? (
+                        <p className="mt-1 text-[11px] text-amber-300">
+                          Add roles in Staff Matrix to manage assignments here.
+                        </p>
+                      ) : null}
                     </label>
                     <div className="space-y-2 rounded-2xl border border-white/10 bg-slate-900/40 p-3 text-xs text-slate-300">
                       <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Status</p>

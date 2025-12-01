@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useAccountContext } from '../context/AccountContext';
@@ -12,10 +12,11 @@ import {
   DEFAULT_RATIO_STAFF,
 } from '../context/ProjectionSettingsContext';
 import { fetchProjectionSettings, updateProjectionSettings } from '../services/projectionSettings';
-import { ADMIN_ROLE_SET, ROLE_OPTIONS } from '../constants/roles';
+import { ADMIN_ROLE_SET } from '../constants/roles';
 import { SHIFT_WINDOW_COLOR_SCHEMES } from '../constants/shiftWindows';
 import { StatusChip } from '../components/StatusChip';
 import { minutesToTimeInput, timeInputToMinutes } from '../utils/time';
+import { useStaffMatrixRoles } from '../hooks/useStaffMatrixRoles';
 import type { CoverageMode, ShiftTemplate } from '../types';
 
 const DEFAULT_SEGMENT_DURATION = 480;
@@ -222,17 +223,25 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, hasProjectionSetti
     replaceShiftsFromServer,
     rollbackShifts,
   } = useProjectionSettingsContext();
+  const { roles: staffMatrixRoles } = useStaffMatrixRoles(accountId);
+  const roleOptions = useMemo(() => staffMatrixRoles.map((role) => role.name), [staffMatrixRoles]);
   const queryClient = useQueryClient();
 
   const [scheduleFeedback, setScheduleFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [roleDraft, setRoleDraft] = useState({
-    role: ROLE_OPTIONS[0],
+    role: '',
     label: '',
     start: '10:00',
     end: '18:00',
     color: SHIFT_COLOR_FALLBACK,
     days: DEFAULT_ROLE_DAYS,
   });
+
+  useEffect(() => {
+    if (!roleDraft.role && roleOptions[0]) {
+      setRoleDraft((prev) => ({ ...prev, role: roleOptions[0] }));
+    }
+  }, [roleDraft.role, roleOptions]);
 
   const validationError = useMemo(() => validateShifts(shifts), [shifts]);
   const coverageSummary = useMemo(() => getCoverageLabel(coverageMode), [coverageMode]);
@@ -361,6 +370,10 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, hasProjectionSetti
   };
 
   const handleAddRoleShift = () => {
+    if (!roleDraft.role) {
+      setScheduleFeedback({ type: 'error', message: 'Select a role from the Staff Matrix first.' });
+      return;
+    }
     if (!roleDraft.days.length) {
       setScheduleFeedback({ type: 'error', message: 'Select at least one day for role shifts.' });
       return;
@@ -718,13 +731,17 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, hasProjectionSetti
                     value={roleDraft.role}
                     onChange={(event) => handleRoleDraftChange({ role: event.target.value })}
                     className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                    disabled={!roleOptions.length}
                   >
-                    {ROLE_OPTIONS.map((option) => (
+                    {roleOptions.map((option) => (
                       <option key={option} value={option} className="bg-slate-900 text-white">
                         {option}
                       </option>
                     ))}
                   </select>
+                  {!roleOptions.length ? (
+                    <p className="mt-1 text-[11px] text-amber-300">Create roles in the Staff Matrix to add coverage needs.</p>
+                  ) : null}
                 </label>
                 <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
                   Label
@@ -797,9 +814,10 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, hasProjectionSetti
                 <button
                   type="button"
                   onClick={handleAddRoleShift}
-                  className="rounded-2xl border border-white/20 bg-gradient-to-r from-slate-800/60 to-slate-900/70 px-4 py-2 text-sm font-semibold text-white transition hover:border-white/40"
+                  disabled={!roleOptions.length}
+                  className="rounded-2xl border border-white/20 bg-gradient-to-r from-slate-800/60 to-slate-900/70 px-4 py-2 text-sm font-semibold text-white transition hover:border-white/40 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Add role shift
+                  {roleOptions.length ? 'Add role shift' : 'Add roles in Staff Matrix first'}
                 </button>
               </div>
             </div>
@@ -837,11 +855,12 @@ const ProjectionSettingsForm = ({ accountId, settingsLoading, hasProjectionSetti
                         <label className="text-xs uppercase tracking-[0.3em] text-slate-400">
                           Role
                           <select
-                            value={shift.role ?? ROLE_OPTIONS[0]}
+                            value={shift.role ?? roleOptions[0] ?? ''}
                             onChange={(event) => handleRoleShiftRoleChange(shift.id, event.target.value)}
                             className="mt-1 w-full rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-white focus:border-white focus:outline-none"
+                            disabled={!roleOptions.length}
                           >
-                            {ROLE_OPTIONS.map((option) => (
+                            {roleOptions.map((option) => (
                               <option key={option} value={option} className="bg-slate-900 text-white">
                                 {option}
                               </option>
