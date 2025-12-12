@@ -31,3 +31,20 @@ export const formatMinutesLabel = (value: number) => {
 };
 
 export const minutesOfDay = (date: Date) => date.getHours() * 60 + date.getMinutes();
+
+const TIME_PATTERN = /^(\d{1,2}):(\d{2})/;
+
+export const formatTo12Hour = (value?: string | null) => {
+  if (!value) {
+    return '';
+  }
+  const match = value.match(TIME_PATTERN);
+  if (!match) {
+    return value;
+  }
+  const hours = Number(match[1]);
+  const minutes = match[2];
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  return `${hour12}:${minutes} ${period}`;
+};

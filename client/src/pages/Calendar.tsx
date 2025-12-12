@@ -9,12 +9,13 @@ import {
   fetchStaffMatrixCalendar,
   unassignStaffFromTemplate,
 } from '../services/staffMatrix';
-import { ProjectionDay } from '../components/calendar/ProjectionDay';
-import type { ProjectionShiftGroup } from '../components/calendar/ProjectionDay';
+import { fetchProjectionSettings } from '../services/projectionSettings';
+import { ProjectionDay, type CoverageShiftDefinition } from '../components/calendar/ProjectionDay';
 import { StatusChip } from '../components/StatusChip';
 import { AssignStaffModal } from '../components/calendar/AssignStaffModal';
 import { ADMIN_ROLE_SET } from '../constants/roles';
 import { useStaffMatrixRoles } from '../hooks/useStaffMatrixRoles';
+import { timeInputToMinutes } from '../utils/time';
 import type { Role, StaffMatrixCalendarEntry, StaffMember } from '../types';
 
 const calculateWeekStart = (source: Date) => {
@@ -26,61 +27,22 @@ const calculateWeekStart = (source: Date) => {
 
 const toIsoDate = (value: Date) => value.toISOString().split('T')[0];
 
-const SHIFT_TYPE_ORDER = ['Morning', 'Evening', 'Night'];
-
-const isYouthCareWorkerRole = (role?: string | null) =>
-  (role ?? '').trim().toLowerCase() === 'youth care worker';
-
-const getShiftOrder = (shiftType?: string | null) => {
-  if (!shiftType) {
-    return Number.MAX_SAFE_INTEGER;
+const includesPerDiemToken = (value?: string | null) => {
+  const normalized = (value ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return false;
   }
-  const index = SHIFT_TYPE_ORDER.indexOf(shiftType);
-  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+  return (
+    normalized.includes('per-diem') ||
+    normalized.includes('per diem') ||
+    normalized.includes('perdiem') ||
+    normalized.startsWith('pd-') ||
+    normalized.includes('pd-ycw')
+  );
 };
 
-const createShiftGroups = (entries: StaffMatrixCalendarEntry[]): ProjectionShiftGroup[] => {
-  const groups = new Map<string, ProjectionShiftGroup>();
-  entries.forEach((entry) => {
-    const isYouth = isYouthCareWorkerRole(entry.template_role);
-    const baseLabel = isYouth
-      ? entry.shift_type ?? entry.template_label ?? 'Youth Care Worker'
-      : entry.template_label ?? entry.template_role ?? 'Shift';
-    const timeRange = `${entry.start_time} – ${entry.end_time}`;
-    const identifier = isYouth ? entry.shift_type ?? baseLabel : baseLabel;
-    const key = `${identifier}::${entry.start_time}::${entry.end_time}`;
-    const existing = groups.get(key);
-    if (existing) {
-      existing.entries.push(entry);
-      return;
-    }
-    groups.set(key, {
-      key,
-      label: baseLabel,
-      subtitle: isYouth ? 'Youth Care Worker' : entry.template_role ?? undefined,
-      timeRange,
-      entries: [entry],
-      isYouthCare: isYouth,
-      shiftType: entry.shift_type ?? null,
-    });
-  });
-  return Array.from(groups.values()).sort((a, b) => {
-    if (a.isYouthCare || b.isYouthCare) {
-      if (a.isYouthCare && b.isYouthCare) {
-        const orderA = getShiftOrder(a.shiftType);
-        const orderB = getShiftOrder(b.shiftType);
-        if (orderA !== orderB) {
-          return orderA - orderB;
-        }
-        return a.label.localeCompare(b.label);
-      }
-      return a.isYouthCare ? -1 : 1;
-    }
-    const minuteA = a.entries[0]?.start_minute ?? 0;
-    const minuteB = b.entries[0]?.start_minute ?? 0;
-    return minuteA - minuteB;
-  });
-};
+const isPerDiemEntry = (entry: StaffMatrixCalendarEntry) =>
+  includesPerDiemToken(entry.template_role) || includesPerDiemToken(entry.template_label);
 
 type AssignmentTarget = { entry: StaffMatrixCalendarEntry };
 
@@ -122,8 +84,32 @@ export const CalendarPage = () => {
 
   const entries = calendarData?.entries ?? [];
 
+  const { data: projectionSettings } = useQuery(
+    ['projectionSettings', accountId],
+    () => fetchProjectionSettings(accountId),
+    {
+      enabled: Boolean(accountId && isAdmin),
+      refetchOnWindowFocus: false,
+    },
+  );
+
+  const coverageSegments = useMemo<CoverageShiftDefinition[]>(() => {
+    const shifts = projectionSettings?.shifts ?? [];
+    return shifts
+      .filter((shift) => shift.category !== 'role')
+      .map((shift) => ({
+        ...shift,
+        startMinute: timeInputToMinutes(shift.start_time),
+        endMinute: timeInputToMinutes(shift.end_time),
+      }))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [projectionSettings?.shifts]);
+
   const filteredEntries = useMemo(() => {
     return entries.filter((entry) => {
+      if (isPerDiemEntry(entry) && entry.is_open) {
+        return false;
+      }
       const matchesRole = roleFilter === 'all' || entry.template_role === roleFilter;
       const matchesStaff = staffFilter === 'all' || entry.staff_id === staffFilter;
       return matchesRole && matchesStaff;
@@ -278,7 +264,7 @@ export const CalendarPage = () => {
       return {
         date,
         iso,
-        shiftGroups: createShiftGroups(entriesByDate.get(iso) ?? []),
+        entries: entriesByDate.get(iso) ?? [],
       };
     });
   }, [calendarRange.start, calendarRange.end, entriesByDate]);
@@ -373,19 +359,18 @@ export const CalendarPage = () => {
         {isLoading ? (
           <p className="text-sm text-slate-400">Loading staff matrix…</p>
         ) : (
-          <div className="overflow-x-auto">
-            <div className="inline-flex gap-6 pb-4">
-              {dayBuckets.map((bucket) => (
-                <ProjectionDay
-                  key={bucket.iso}
-                  date={bucket.date}
-                  shiftGroups={bucket.shiftGroups}
-                  isAdmin={isAdmin}
-                  onAssignEntry={handleAssignEntry}
-                  onRemoveAssignment={handleRemoveAssignment}
-                />
-              ))}
-            </div>
+          <div className="flex flex-wrap gap-6">
+            {dayBuckets.map((bucket) => (
+              <ProjectionDay
+                key={bucket.iso}
+                date={bucket.date}
+                entries={bucket.entries}
+                coverageSegments={coverageSegments}
+                isAdmin={isAdmin}
+                onAssignEntry={handleAssignEntry}
+                onRemoveAssignment={handleRemoveAssignment}
+              />
+            ))}
           </div>
         )}
       </div>

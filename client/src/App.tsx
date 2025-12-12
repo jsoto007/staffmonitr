@@ -31,7 +31,7 @@ function App() {
         <Route
           path="/calendar/projection"
           element={
-            <Layout>
+            <Layout fullWidth>
               <CalendarPage />
             </Layout>
           }

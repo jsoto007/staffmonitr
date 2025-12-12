@@ -9,13 +9,23 @@ import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { NavBarContainer } from './navigation/NavBarContainer';
 
-export const Layout = ({ children }: { children: ReactNode }) => {
+interface LayoutProps {
+  children: ReactNode;
+  fullWidth?: boolean;
+}
+
+export const Layout = ({ children, fullWidth = false }: LayoutProps) => {
   const location = useLocation();
+  const containerClass = clsx(
+    'flex flex-col gap-4 pb-20 pt-32',
+    'px-4',
+    fullWidth ? 'w-full' : 'mx-auto max-w-8xl',
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-blue-50 text-slate-800 transition-colors duration-300 ease-out dark:from-gray-900 dark:via-slate-900 dark:to-black dark:text-slate-100">
       <NavBarContainer />
-      <div className="mx-auto flex max-w-8xl flex-col gap-4 px-4 pb-20 pt-32">
+      <div className={containerClass}>
         <main className="w-full flex-1 rounded-[2rem] border border-white/40 bg-white/70 p-6 shadow-lg shadow-black/5 backdrop-blur-2xl transition-all duration-300 ease-out hover:shadow-xl hover:shadow-black/10 dark:border-white/10 dark:bg-slate-900/60 dark:shadow-xl dark:shadow-black/20">
           {children}
         </main>
