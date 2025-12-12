@@ -373,17 +373,19 @@ export const CalendarPage = () => {
         {isLoading ? (
           <p className="text-sm text-slate-400">Loading staff matrix…</p>
         ) : (
-          <div className="space-y-6">
-            {dayBuckets.map((bucket) => (
-              <ProjectionDay
-                key={bucket.iso}
-                date={bucket.date}
-                shiftGroups={bucket.shiftGroups}
-                isAdmin={isAdmin}
-                onAssignEntry={handleAssignEntry}
-                onRemoveAssignment={handleRemoveAssignment}
-              />
-            ))}
+          <div className="overflow-x-auto">
+            <div className="inline-flex gap-6 pb-4">
+              {dayBuckets.map((bucket) => (
+                <ProjectionDay
+                  key={bucket.iso}
+                  date={bucket.date}
+                  shiftGroups={bucket.shiftGroups}
+                  isAdmin={isAdmin}
+                  onAssignEntry={handleAssignEntry}
+                  onRemoveAssignment={handleRemoveAssignment}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
