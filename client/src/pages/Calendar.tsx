@@ -9,22 +9,13 @@ import {
   fetchStaffMatrixCalendar,
   unassignStaffFromTemplate,
 } from '../services/staffMatrix';
-import { ViewSwitcher } from '../components/calendar/ViewSwitcher';
-import { DayView } from '../components/calendar/DayView';
-import { WeekView } from '../components/calendar/WeekView';
-import { MonthView } from '../components/calendar/MonthView';
+import { ProjectionDay } from '../components/calendar/ProjectionDay';
+import type { ProjectionShiftGroup } from '../components/calendar/ProjectionDay';
 import { StatusChip } from '../components/StatusChip';
 import { AssignStaffModal } from '../components/calendar/AssignStaffModal';
 import { ADMIN_ROLE_SET } from '../constants/roles';
 import { useStaffMatrixRoles } from '../hooks/useStaffMatrixRoles';
 import type { Role, StaffMatrixCalendarEntry, StaffMember } from '../types';
-
-type ViewMode = 'day' | 'week' | 'month';
-
-const formatHeadline = (date: Date, mode: ViewMode) =>
-  mode === 'month'
-    ? date.toLocaleDateString([], { month: 'long', year: 'numeric' })
-    : date.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
 
 const calculateWeekStart = (source: Date) => {
   const target = new Date(source);
@@ -35,14 +26,60 @@ const calculateWeekStart = (source: Date) => {
 
 const toIsoDate = (value: Date) => value.toISOString().split('T')[0];
 
-const getMonthWindow = (focus: Date) => {
-  const start = new Date(focus.getFullYear(), focus.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setMonth(start.getMonth() + 1);
-  end.setDate(0);
-  end.setHours(0, 0, 0, 0);
-  return { start, end };
+const SHIFT_TYPE_ORDER = ['Morning', 'Evening', 'Night'];
+
+const isYouthCareWorkerRole = (role?: string | null) =>
+  (role ?? '').trim().toLowerCase() === 'youth care worker';
+
+const getShiftOrder = (shiftType?: string | null) => {
+  if (!shiftType) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+  const index = SHIFT_TYPE_ORDER.indexOf(shiftType);
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
+};
+
+const createShiftGroups = (entries: StaffMatrixCalendarEntry[]): ProjectionShiftGroup[] => {
+  const groups = new Map<string, ProjectionShiftGroup>();
+  entries.forEach((entry) => {
+    const isYouth = isYouthCareWorkerRole(entry.template_role);
+    const baseLabel = isYouth
+      ? entry.shift_type ?? entry.template_label ?? 'Youth Care Worker'
+      : entry.template_label ?? entry.template_role ?? 'Shift';
+    const timeRange = `${entry.start_time} – ${entry.end_time}`;
+    const identifier = isYouth ? entry.shift_type ?? baseLabel : baseLabel;
+    const key = `${identifier}::${entry.start_time}::${entry.end_time}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.entries.push(entry);
+      return;
+    }
+    groups.set(key, {
+      key,
+      label: baseLabel,
+      subtitle: isYouth ? 'Youth Care Worker' : entry.template_role ?? undefined,
+      timeRange,
+      entries: [entry],
+      isYouthCare: isYouth,
+      shiftType: entry.shift_type ?? null,
+    });
+  });
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.isYouthCare || b.isYouthCare) {
+      if (a.isYouthCare && b.isYouthCare) {
+        const orderA = getShiftOrder(a.shiftType);
+        const orderB = getShiftOrder(b.shiftType);
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        return a.label.localeCompare(b.label);
+      }
+      return a.isYouthCare ? -1 : 1;
+    }
+    const minuteA = a.entries[0]?.start_minute ?? 0;
+    const minuteB = b.entries[0]?.start_minute ?? 0;
+    return minuteA - minuteB;
+  });
 };
 
 type AssignmentTarget = { entry: StaffMatrixCalendarEntry };
@@ -54,7 +91,6 @@ export const CalendarPage = () => {
   const isAdmin = currentStaff ? ADMIN_ROLE_SET.has(currentStaff.role) : false;
   const accountId = !authLoading && isAuthenticated ? selectedAccount?.id ?? '' : '';
 
-  const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [focusDate, setFocusDate] = useState(() => new Date());
   const [assignmentTarget, setAssignmentTarget] = useState<AssignmentTarget | null>(null);
   const [assignmentFeedback, setAssignmentFeedback] = useState<string | null>(null);
@@ -65,19 +101,11 @@ export const CalendarPage = () => {
   const { roles: staffMatrixRoles } = useStaffMatrixRoles(accountId);
 
   const calendarRange = useMemo(() => {
-    if (viewMode === 'day') {
-      const day = new Date(focusDate);
-      day.setHours(0, 0, 0, 0);
-      return { start: day, end: day };
-    }
-    if (viewMode === 'week') {
-      const start = calculateWeekStart(focusDate);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 6);
-      return { start, end };
-    }
-    return getMonthWindow(focusDate);
-  }, [viewMode, focusDate]);
+    const start = calculateWeekStart(focusDate);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return { start, end };
+  }, [focusDate]);
 
   const startDateIso = toIsoDate(calendarRange.start);
   const endDateIso = toIsoDate(calendarRange.end);
@@ -141,17 +169,6 @@ export const CalendarPage = () => {
       refetchOnWindowFocus: false,
     },
   );
-
-  const weekDays = useMemo(() => {
-    if (viewMode !== 'week') {
-      return [];
-    }
-    return Array.from({ length: 7 }).map((_, index) => {
-      const day = new Date(calendarRange.start);
-      day.setDate(calendarRange.start.getDate() + index);
-      return day;
-    });
-  }, [calendarRange.start, viewMode]);
 
   const assignmentMutation = useMutation(
     ({ entry, staffId }: { entry: StaffMatrixCalendarEntry; staffId: string }) => {
@@ -244,64 +261,32 @@ export const CalendarPage = () => {
     };
   }, [assignmentTarget]);
 
-  const viewContent = useMemo(() => {
-    if (viewMode === 'day') {
-      const dayEntries = entriesByDate.get(toIsoDate(focusDate)) ?? [];
-      return (
-        <DayView
-          date={focusDate}
-          entries={dayEntries}
-          isAdmin={isAdmin}
-          onAssignEntry={handleAssignEntry}
-          onRemoveAssignment={handleRemoveAssignment}
-        />
-      );
-    }
-    if (viewMode === 'week') {
-      return (
-        <WeekView
-          weekStart={calendarRange.start}
-          weekDays={weekDays}
-          entriesByDate={entriesByDate}
-          isAdmin={isAdmin}
-          onAssignEntry={handleAssignEntry}
-          onRemoveAssignment={handleRemoveAssignment}
-        />
-      );
-    }
-    return (
-      <MonthView
-        monthDate={focusDate}
-        entries={filteredEntries}
-        entriesByDate={entriesByDate}
-        isAdmin={isAdmin}
-        onAssignEntry={handleAssignEntry}
-        onRemoveAssignment={handleRemoveAssignment}
-      />
-    );
-  }, [
-    viewMode,
-    focusDate,
-    calendarRange.start,
-    entriesByDate,
-    filteredEntries,
-    weekDays,
-    isAdmin,
-    handleAssignEntry,
-    handleRemoveAssignment,
-  ]);
-
   const moveFocus = (direction: -1 | 1) => {
     const updated = new Date(focusDate);
-    if (viewMode === 'day') {
-      updated.setDate(updated.getDate() + direction);
-    } else if (viewMode === 'week') {
-      updated.setDate(updated.getDate() + direction * 7);
-    } else {
-      updated.setMonth(updated.getMonth() + direction);
-    }
+    updated.setDate(updated.getDate() + direction * 7);
     setFocusDate(updated);
   };
+
+  const dayBuckets = useMemo(() => {
+    const start = calendarRange.start;
+    const end = calendarRange.end;
+    const totalDays = Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    return Array.from({ length: totalDays }).map((_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      const iso = toIsoDate(date);
+      return {
+        date,
+        iso,
+        shiftGroups: createShiftGroups(entriesByDate.get(iso) ?? []),
+      };
+    });
+  }, [calendarRange.start, calendarRange.end, entriesByDate]);
+
+  const weekRangeLabel = `${calendarRange.start.toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+  })} – ${calendarRange.end.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
 
   const closeAssignmentModal = useCallback(() => {
     setAssignmentTarget(null);
@@ -313,7 +298,12 @@ export const CalendarPage = () => {
         <div>
           <p className="text-sm uppercase tracking-[0.4em] text-slate-500">{selectedAccount?.name}</p>
           <h1 className="text-3xl font-semibold text-white">Projection</h1>
-          <p className="text-sm text-slate-400">Switch between day, week, and month views to preview upcoming staffing coverage.</p>
+          <p className="text-sm text-slate-400">
+            Live shift coverage sourced directly from the staff matrix so assignments always reflect the latest data.
+          </p>
+          <p className="text-xs text-slate-500">
+            Projection entries cannot change the underlying schedule template—use these cards to assign or remove staff per shift only.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <button
@@ -330,7 +320,7 @@ export const CalendarPage = () => {
           >
             Next
           </button>
-          <ViewSwitcher value={viewMode} onChange={(mode) => setViewMode(mode)} />
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-400">{weekRangeLabel}</p>
         </div>
       </header>
 
@@ -372,15 +362,30 @@ export const CalendarPage = () => {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <StatusChip label={viewMode} color={viewMode === 'month' ? '#38bdf8' : viewMode === 'week' ? '#a855f7' : '#f472b6'} />
-        <p className="text-sm text-slate-400">{formatHeadline(focusDate, viewMode)}</p>
+        <StatusChip label="Staff matrix" color="#38bdf8" />
+        <p className="text-sm text-slate-400">Week of {weekRangeLabel}</p>
       </div>
 
       {assignmentFeedback && <p className="text-xs text-emerald-400">{assignmentFeedback}</p>}
       {assignmentError && <p className="text-xs text-rose-400">{assignmentError}</p>}
 
       <div className="space-y-6">
-        {isLoading ? <p className="text-sm text-slate-400">Loading staff matrix…</p> : viewContent}
+        {isLoading ? (
+          <p className="text-sm text-slate-400">Loading staff matrix…</p>
+        ) : (
+          <div className="space-y-6">
+            {dayBuckets.map((bucket) => (
+              <ProjectionDay
+                key={bucket.iso}
+                date={bucket.date}
+                shiftGroups={bucket.shiftGroups}
+                isAdmin={isAdmin}
+                onAssignEntry={handleAssignEntry}
+                onRemoveAssignment={handleRemoveAssignment}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {modalContext && (

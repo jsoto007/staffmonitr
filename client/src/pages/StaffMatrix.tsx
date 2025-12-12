@@ -123,6 +123,11 @@ type ScheduleRow = {
   staffRole?: string;
 };
 
+const STATUS_BADGE_STYLES: Record<ScheduleRow['status'], string> = {
+  Assigned: 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-400 dark:ring-green-500/30',
+  Vacant: 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/30 dark:text-rose-400 dark:ring-rose-500/30',
+};
+
 const timeFormatter = new Intl.DateTimeFormat('en-US', {
   hour: 'numeric',
   minute: 'numeric',
@@ -1010,8 +1015,8 @@ export const StaffMatrixPage = () => {
                       const vacantCount = shiftRows.filter((row) => row.status === 'Vacant').length;
 
                       return (
-                        <div key={shiftLabel} className="overflow-x-auto rounded-2xl border border-slate-100/70 dark:border-white/5">
-                          <div className="flex items-center justify-between border-b border-slate-100/60 bg-slate-50/80 px-4 py-3 text-xs uppercase tracking-wide text-slate-500 dark:border-white/5 dark:bg-white/5 dark:text-slate-400">
+                        <div key={shiftLabel} className="rounded-2xl border border-slate-100/70 bg-white/90 shadow-sm shadow-black/5 dark:border-white/10 dark:bg-slate-900/50">
+                          <div className="flex items-center justify-between border-b border-slate-100/70 bg-slate-50/80 px-4 py-3 text-xs uppercase tracking-wide text-slate-500 dark:border-white/5 dark:bg-white/5 dark:text-slate-400">
                             <div className="font-semibold text-slate-700 dark:text-slate-200">{shiftLabel}</div>
                             <div className="flex items-center gap-3 text-[11px] font-semibold">
                               <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
@@ -1022,79 +1027,147 @@ export const StaffMatrixPage = () => {
                               </span>
                             </div>
                           </div>
-                          <table className="min-w-full divide-y divide-slate-200 text-sm text-slate-700 dark:divide-white/5 dark:text-slate-200">
-                            <thead className="bg-white/70 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
-                              <tr>
-                                <th className="py-3.5 pl-4 pr-3 text-left font-semibold sm:pl-6">Name</th>
-                                <th className="px-3 py-3.5 text-left font-semibold">Title</th>
-                                <th className="px-3 py-3.5 text-left font-semibold">Status</th>
-                                <th className="px-3 py-3.5 text-left font-semibold">Role</th>
-                                <th className="relative py-3.5 pl-3 pr-4 sm:pr-6">
-                                  <span className="sr-only">Edit</span>
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 bg-white dark:bg-slate-900/40">
-                              {shiftRows.map((row) => {
-                                const staffMember = row.staffId ? staffList.find((s) => s.id === row.staffId) : undefined;
-                                const avatarUrl = staffMember?.photo_url;
-                                const phoneNumber = staffMember?.phone_number;
-                                const email = staffMember?.email;
+                          <div className="hidden md:block">
+                            <div className="overflow-x-auto rounded-b-2xl border border-slate-100/70 dark:border-white/5">
+                              <table className="min-w-full divide-y divide-slate-200 text-sm text-slate-700 dark:divide-white/5 dark:text-slate-200">
+                                <thead className="bg-white/70 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/60 dark:text-slate-400">
+                                  <tr>
+                                    <th className="py-3.5 pl-4 pr-3 text-left font-semibold sm:pl-6">Name</th>
+                                    <th className="px-3 py-3.5 text-left font-semibold">Title</th>
+                                    <th className="px-3 py-3.5 text-left font-semibold">Status</th>
+                                    <th className="px-3 py-3.5 text-left font-semibold">Role</th>
+                                    <th className="relative py-3.5 pl-3 pr-4 sm:pr-6">
+                                      <span className="sr-only">Edit</span>
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 bg-white dark:bg-slate-900/40">
+                                  {shiftRows.map((row) => {
+                                    const staffMember = row.staffId ? staffList.find((s) => s.id === row.staffId) : undefined;
+                                    const avatarUrl = staffMember?.photo_url;
+                                    const phoneNumber = staffMember?.phone_number;
+                                    const email = staffMember?.email;
+                                    const statusLabel = row.status === 'Assigned' ? 'Active' : 'Vacant';
 
-                                return (
-                                  <tr key={row.id}>
-                                    <td className="whitespace-nowrap py-5 pl-4 pr-3 text-sm sm:pl-6">
-                                      <div className="flex items-center">
-                                        <div className="h-11 w-11 flex-shrink-0">
-                                          {avatarUrl ? (
-                                            <img className="h-11 w-11 rounded-full" src={avatarUrl} alt="" />
-                                          ) : (
-                                            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                                              {row.staffName.charAt(0)}
+                                    return (
+                                      <tr key={row.id}>
+                                        <td className="whitespace-nowrap py-5 pl-4 pr-3 text-sm sm:pl-6">
+                                          <div className="flex items-center">
+                                            <div className="h-11 w-11 flex-shrink-0">
+                                              {avatarUrl ? (
+                                                <img className="h-11 w-11 rounded-full" src={avatarUrl} alt="" />
+                                              ) : (
+                                                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                                  {row.staffName.charAt(0)}
+                                                </div>
+                                              )}
                                             </div>
-                                          )}
-                                        </div>
-                                        <div className="ml-4">
-                                          <div className="font-medium text-slate-900 dark:text-white">{row.staffName}</div>
-                                          <div className="mt-1 text-slate-500 dark:text-slate-400">{email}</div>
-                                        </div>
+                                            <div className="ml-4">
+                                              <div className="font-medium text-slate-900 dark:text-white">{row.staffName}</div>
+                                              <div className="mt-1 text-slate-500 dark:text-slate-400">{email}</div>
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
+                                          <div className="text-slate-900 dark:text-white">
+                                            {row.status === 'Assigned' ? row.staffRole ?? row.template.role : 'Vacant'}
+                                          </div>
+                                          <div className="mt-1 text-slate-500 dark:text-slate-400">{phoneNumber}</div>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
+                                          <span
+                                            className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${STATUS_BADGE_STYLES[row.status]}`}
+                                          >
+                                            {statusLabel}
+                                          </span>
+                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
+                                          {row.template.role}
+                                          {row.template.shift_type ? ` · ${row.template.shift_type}` : ''}
+                                          <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                                            {formatSchedulePattern(row.template.weekly_pattern)}
+                                          </div>
+                                        </td>
+                                        <td className="relative whitespace-nowrap py-5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleEditTemplate(row.template)}
+                                            className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                          >
+                                            Edit<span className="sr-only">, {row.template.label}</span>
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-4 px-4 pb-4 pt-3 md:hidden">
+                            {shiftRows.map((row) => {
+                              const staffMember = row.staffId ? staffList.find((s) => s.id === row.staffId) : undefined;
+                              const avatarUrl = staffMember?.photo_url;
+                              const phoneNumber = staffMember?.phone_number;
+                              const email = staffMember?.email;
+                              const statusLabel = row.status === 'Assigned' ? 'Active' : 'Vacant';
+
+                              return (
+                                <div
+                                  key={row.id}
+                                  className="rounded-2xl border border-slate-100/80 bg-white/90 p-4 shadow-sm dark:border-white/5 dark:bg-slate-900/60"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-11 w-11 flex-shrink-0">
+                                        {avatarUrl ? (
+                                          <img className="h-11 w-11 rounded-full" src={avatarUrl} alt="" />
+                                        ) : (
+                                          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                                            {row.staffName.charAt(0)}
+                                          </div>
+                                        )}
                                       </div>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
-                                      <div className="text-slate-900 dark:text-white">{row.status === 'Assigned' ? row.staffRole ?? row.template.role : 'Vacant'}</div>
-                                      <div className="mt-1 text-slate-500 dark:text-slate-400">{phoneNumber}</div>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
-                                      <span
-                                        className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${row.status === 'Assigned'
-                                          ? 'bg-green-50 text-green-700 ring-green-600/20 dark:bg-green-900/30 dark:text-green-400 dark:ring-green-500/30'
-                                          : 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-900/30 dark:text-rose-400 dark:ring-rose-500/30'
-                                          }`}
-                                      >
-                                        {row.status === 'Assigned' ? 'Active' : 'Vacant'}
-                                      </span>
-                                    </td>
-                                    <td className="whitespace-nowrap px-3 py-5 text-sm text-slate-500 dark:text-slate-400">
+                                      <div>
+                                        <p className="text-sm font-medium text-slate-900 dark:text-white">{row.staffName}</p>
+                                        {row.template.label ? (
+                                          <p className="text-xs text-slate-500 dark:text-slate-400">{row.template.label}</p>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                    <span
+                                      className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${STATUS_BADGE_STYLES[row.status]}`}
+                                    >
+                                      {statusLabel}
+                                    </span>
+                                  </div>
+                                  <div className="mt-2 flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
+                                    <span>{row.status === 'Assigned' ? row.staffRole ?? row.template.role : 'Vacant'}</span>
+                                    {email ? <span>{email}</span> : null}
+                                    {phoneNumber ? <span>{phoneNumber}</span> : null}
+                                  </div>
+                                  <div className="mt-3">
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-white">
                                       {row.template.role}
                                       {row.template.shift_type ? ` · ${row.template.shift_type}` : ''}
-                                      <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-                                        {formatSchedulePattern(row.template.weekly_pattern)}
-                                      </div>
-                                    </td>
-                                    <td className="relative whitespace-nowrap py-5 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleEditTemplate(row.template)}
-                                        className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                                      >
-                                        Edit<span className="sr-only">, {row.template.label}</span>
-                                      </button>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                                    </p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                      {formatSchedulePattern(row.template.weekly_pattern)}
+                                    </p>
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEditTemplate(row.template)}
+                                      className="text-sm font-semibold text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
+                                    >
+                                      Edit<span className="sr-only">, {row.template.label}</span>
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       );
                     })}
